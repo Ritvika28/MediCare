@@ -8,13 +8,17 @@ const SPECIALIZATION_ALIASES = {
   neurologist: 'Neurology',
   dermatologist: 'Dermatology',
   pediatrician: 'Pediatrics',
+  'child specialist': 'Pediatrics',
   orthopedist: 'Orthopedics',
   orthopedic: 'Orthopedics',
+  orthopaedic: 'Orthopedics',
   gastroenterologist: 'Gastroenterology',
   ophthalmologist: 'Ophthalmology',
   psychiatrist: 'Psychiatry',
   pulmonologist: 'Pulmonology',
   physician: 'General Medicine',
+  gynecologist: 'Gynecology',
+  urologist: 'Urology',
 };
 
 export const searchDoctors = async (params) => {
@@ -156,8 +160,8 @@ export const searchDoctors = async (params) => {
     .populate('user', 'firstName lastName avatar phone email')
     .populate('departmentId', 'name icon description')
     .populate('department', 'name icon description')
-    .populate('hospitalId', 'name logo coverImage address rating reviewCount')
-    .populate('hospital', 'name logo coverImage address rating reviewCount');
+    .populate('hospitalId', 'name logo coverImage address location rating reviewCount')
+    .populate('hospital', 'name logo coverImage address location rating reviewCount');
 
   if (sort === 'experience') dbQuery = dbQuery.sort({ experience: -1 });
   else if (sort === 'fee') dbQuery = dbQuery.sort({ consultationFee: 1 });
@@ -171,4 +175,39 @@ export const searchDoctors = async (params) => {
   const [doctors, total] = await Promise.all([dbQuery, Doctor.countDocuments(query)]);
 
   return { doctors, total };
+};
+
+function haversineKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+export const searchDoctorsNearby = async (params) => {
+  const lat = parseFloat(params.latitude || params.lat);
+  const lng = parseFloat(params.longitude || params.lng);
+  const radiusKm = parseFloat(params.radius || params.maxDistanceKm || 50);
+  if (Number.isNaN(lat) || Number.isNaN(lng)) return { doctors: [], total: 0 };
+
+  const { doctors } = await searchDoctors({ ...params, limit: 200, page: 1 });
+  const withDistance = doctors
+    .map((d) => {
+      const hospital = d.hospitalId || d.hospital;
+      const coords = hospital?.location?.coordinates || hospital?.address?.coordinates;
+      if (!coords || coords.length < 2) return null;
+      const [hLng, hLat] = coords;
+      const distance = haversineKm(lat, lng, hLat, hLng);
+      if (distance > radiusKm) return null;
+      const doc = d.toObject ? d.toObject() : { ...d };
+      doc.distance = parseFloat(distance.toFixed(1));
+      doc.distanceUnit = 'km';
+      return doc;
+    })
+    .filter(Boolean)
+    .sort((a, b) => a.distance - b.distance);
+
+  const limit = parseInt(params.limit, 10) || 20;
+  return { doctors: withDistance.slice(0, limit), total: withDistance.length };
 };

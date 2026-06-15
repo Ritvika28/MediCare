@@ -88,7 +88,7 @@ export function NearbyHospitalMap({ userLat, userLng, hospitals = [] }) {
         `;
 
         if (isNetwork) {
-          popupContent += `<a href="/patient/hospitals/${h._id}" class="inline-block bg-teal-600 text-white text-xs font-semibold px-2 py-1 rounded hover:bg-teal-700 transition">Book Appointment</a>`;
+          popupContent += `<a href="/patient/hospitals/${h._id}" class="inline-block bg-teal-600 text-white text-xs font-semibold px-2 py-1 rounded hover:bg-teal-700 transition">View Hospital</a>`;
         } else {
           const mapsUrl = `https://www.google.com/maps/dir/?api=1&origin=${userLat || ''},${userLng || ''}&destination=${lat},${lng}&travelmode=driving`;
           popupContent += `<a href="${mapsUrl}" target="_blank" rel="noreferrer" class="inline-block bg-slate-800 text-white text-xs font-semibold px-2 py-1 rounded hover:bg-slate-900 transition">Get Directions</a>`;

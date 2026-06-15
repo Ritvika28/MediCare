@@ -19,7 +19,6 @@ import DepartmentDoctors from '@/pages/patient/DepartmentDoctors';
 import DoctorProfile from '@/pages/Doctors/DoctorProfile';
 import CompareHospitals from '@/pages/patient/CompareHospitals';
 import PatientAppointments from '@/pages/patient/Appointments';
-import BookingPage from '@/pages/Appointments/BookingPage';
 import PatientRecords from '@/pages/patient/Records';
 import PatientPrescriptions from '@/pages/patient/Prescriptions';
 import AIAssistant from '@/pages/patient/AIAssistant';
@@ -27,6 +26,7 @@ import PatientNotifications from '@/pages/patient/Notifications';
 import PatientProfile from '@/pages/patient/Profile';
 import Emergency from '@/pages/patient/Emergency';
 import HealthScore from '@/pages/patient/HealthScore';
+import HealthTwinDashboard from '@/pages/patient/HealthTwinDashboard';
 
 // New features
 import MedicineReminder from '@/pages/MedicineReminder';
@@ -75,9 +75,9 @@ export function AppRoutes() {
           <Route path="hospitals/:id" element={<HospitalDetails />} />
           <Route path="hospitals/:hospitalId/departments/:departmentId" element={<DepartmentDoctors />} />
           <Route path="hospitals/:hospitalId/doctors/:doctorId" element={<DoctorProfile />} />
+          <Route path="doctors/:doctorId" element={<DoctorProfile />} />
           <Route path="compare" element={<CompareHospitals />} />
           <Route path="appointments" element={<PatientAppointments />} />
-          <Route path="book/:doctorId" element={<BookingPage />} />
           <Route path="records" element={<PatientRecords />} />
           <Route path="prescriptions" element={<PatientPrescriptions />} />
           <Route path="ai-assistant" element={<AIAssistant />} />
@@ -85,6 +85,7 @@ export function AppRoutes() {
           <Route path="profile" element={<PatientProfile />} />
           <Route path="emergency" element={<Emergency />} />
           <Route path="health-score" element={<HealthScore />} />
+          <Route path="health-twin" element={<HealthTwinDashboard />} />
           <Route path="medicine-reminder" element={<MedicineReminder />} />
           <Route path="health-analytics" element={<HealthAnalytics />} />
           <Route path="health-calculators" element={<HealthCalculators />} />

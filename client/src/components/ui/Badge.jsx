@@ -6,6 +6,7 @@ const variants = {
   warning: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
   destructive: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
   secondary: 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200',
+  outline: 'border border-slate-200 text-slate-700 dark:border-slate-700 dark:text-slate-300',
 };
 
 export function Badge({ className, variant = 'default', children }) {

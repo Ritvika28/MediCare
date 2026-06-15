@@ -261,9 +261,9 @@ export default function HealthRiskAssessment() {
                     )}
                     <div className="pt-2 flex items-center justify-between">
                       <span className="text-xs font-black text-slate-700 dark:text-slate-300">₹{doc.consultationFee}</span>
-                      <Link to={`/patient/book/${doc._id}`}>
+                      <Link to={`/patient/doctors/${doc._id}`}>
                         <Button className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-bold px-3 py-1">
-                          Book Visit
+                          View Profile
                         </Button>
                       </Link>
                     </div>

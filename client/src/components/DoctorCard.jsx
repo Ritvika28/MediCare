@@ -113,15 +113,10 @@ export function DoctorCard({ doctor, hospitalId, departmentId, consultationType 
         </div>
 
         {/* Buttons Row */}
-        <div className="grid grid-cols-2 gap-2 pt-2 border-t dark:border-slate-800/60">
-          <Link to={`/patient/hospitals/${hId}/doctors/${doctor._id}`} className="w-full">
-            <Button variant="outline" size="sm" className="w-full text-xs font-bold py-2 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300 bg-transparent hover:bg-slate-50 dark:hover:bg-slate-800">
-              View Profile
-            </Button>
-          </Link>
-          <Link to={`/patient/book/${doctor._id}?hospitalId=${hId}&departmentId=${dId}&type=${consultationType}`} className="w-full">
+        <div className="grid grid-cols-1 gap-2 pt-2 border-t dark:border-slate-800/60">
+          <Link to={hId ? `/patient/hospitals/${hId}/doctors/${doctor._id}` : `/patient/doctors/${doctor._id}`} className="w-full">
             <Button size="sm" className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-2 rounded-xl shadow-md">
-              Book Slot
+              View Doctor Profile
             </Button>
           </Link>
         </div>

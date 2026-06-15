@@ -4,6 +4,7 @@ import { Doctor } from '../models/Doctor.js';
 import { Hospital } from '../models/Hospital.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { runMLSuiteForUser } from '../services/HealthTwinService.js';
 
 // Calculate risk score from assessment answers
 function calculateScores(answers) {
@@ -133,6 +134,9 @@ export const createAssessment = asyncHandler(async (req, res) => {
     recommendedDoctors: recommendedDoctorIds,
     recommendedHospitals: recommendedHospitalIds
   });
+
+  // Run the ML pipeline in the background to update predictions, forecasts, anomalies, and health twin
+  runMLSuiteForUser(req.user._id).catch(err => console.error('Error running ML suite in assessmentController:', err));
 
   const populatedAssessment = await HealthAssessment.findById(assessment._id)
     .populate({

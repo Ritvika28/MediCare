@@ -2,6 +2,7 @@ import { AIChatHistory } from '../models/AIChatHistory.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { chatWithAI, suggestDoctorsBySymptoms } from '../services/aiService.js';
+import { detectEmergencySymptoms, generateAINotification } from '../services/notificationEngineService.js';
 
 export const sendAIMessage = asyncHandler(async (req, res) => {
   const { message, conversationId } = req.body;
@@ -23,6 +24,10 @@ export const sendAIMessage = asyncHandler(async (req, res) => {
 
   const history = conversation.messages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
   const aiResponse = await chatWithAI(history, req.user._id);
+
+  if (detectEmergencySymptoms(message)) {
+    await generateAINotification(req.user._id, message, true);
+  }
 
   conversation.messages.push({ role: 'assistant', content: aiResponse.content });
   if (conversation.messages.length === 2) {

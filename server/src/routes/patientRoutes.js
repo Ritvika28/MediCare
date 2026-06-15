@@ -10,6 +10,8 @@ router.get('/profile/me', restrictTo('patient'), patientController.getProfile);
 router.patch('/profile/me', restrictTo('patient'), patientController.updateProfile);
 router.get('/health-score', restrictTo('patient'), patientController.getHealthScore);
 router.get('/dashboard/stats', restrictTo('patient'), patientController.getDashboardStats);
+router.get('/dashboard/nearby-summary', restrictTo('patient'), patientController.getNearbySummary);
+router.get('/health-metrics', restrictTo('patient'), patientController.getHealthMetrics);
 
 router.get('/', restrictTo('admin', 'doctor'), patientController.getPatients);
 router.get('/:id', restrictTo('admin', 'doctor'), patientController.getPatientById);

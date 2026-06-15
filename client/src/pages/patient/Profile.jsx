@@ -13,10 +13,16 @@ import {
   Calendar, FileText, Pill, Activity, User, Phone, Droplet, 
   Sparkles, CheckCircle2, ChevronRight, Stethoscope, FileHeart, Award, HeartPulse, Heart
 } from 'lucide-react';
+import { useHealthTwin, usePredictions, useForecast, useAnomalies } from '@/hooks/useML';
 
 export default function PatientProfile() {
   const { user, profile, fetchUser } = useAuth();
   const { toast } = useToast();
+
+  const { data: twinData } = useHealthTwin();
+  const { data: predictionsData } = usePredictions();
+  const { data: forecastData } = useForecast();
+  const { data: anomaliesData } = useAnomalies();
 
   const { register, handleSubmit, watch } = useForm({
     defaultValues: {
@@ -74,6 +80,31 @@ export default function PatientProfile() {
   });
   const records = recordsData || [];
 
+  // Query calculator history for timeline
+  const { data: calcHistoryData, isLoading: calcHistoryLoading } = useQuery({
+    queryKey: ['calculator-history'],
+    queryFn: () => api.get('/calculators/history?limit=20').then((r) => r.data.data || []),
+  });
+  const calcHistory = calcHistoryData || [];
+
+  // Latest health metrics from HealthMetric engine
+  const { data: healthMetricsRes, isLoading: metricsLoading } = useQuery({
+    queryKey: ['profile-health-metrics'],
+    queryFn: () => api.get('/patients/health-metrics').then((r) => r.data.data),
+  });
+  const latestMetrics = healthMetricsRes?.latest || {};
+  const healthScore = healthMetricsRes?.healthScore;
+
+  const metricCards = [
+    { key: 'bmi', label: 'BMI', icon: Activity, format: (m) => m?.value ? `${m.value} kg/m²` : '—' },
+    { key: 'blood_pressure', label: 'Blood Pressure', icon: HeartPulse, format: (m) => m?.metadata?.outputs ? `${m.metadata.outputs.systolic}/${m.metadata.outputs.diastolic} mmHg` : '—' },
+    { key: 'blood_sugar', label: 'Blood Sugar', icon: Droplet, format: (m) => m?.value ? `${m.value} mg/dL` : '—' },
+    { key: 'sleep_assessment', label: 'Sleep Score', icon: Sparkles, format: (m) => m?.score ?? '—' },
+    { key: 'stress_assessment', label: 'Stress Score', icon: Heart, format: (m) => m?.score ?? '—' },
+    { key: 'kidney_health', label: 'Kidney Score', icon: Stethoscope, format: (m) => m?.value ? `eGFR ${m.value}` : '—' },
+    { key: 'liver_health', label: 'Liver Score', icon: FileHeart, format: (m) => m?.score ?? m?.value ?? '—' },
+  ];
+
   // Merge & Sort all entries chronologically (newest first)
   const [timeline, setTimeline] = useState([]);
   
@@ -122,11 +153,38 @@ export default function PatientProfile() {
       });
     });
 
+    calcHistory.forEach((calc) => {
+      const labels = {
+        blood_pressure: 'Blood Pressure Assessment',
+        blood_sugar: 'Blood Sugar Test',
+        kidney_health: 'Kidney Health Assessment',
+        liver_health: 'Liver Health Assessment',
+        stress_assessment: 'Stress Assessment',
+        sleep_assessment: 'Sleep Assessment',
+        cholesterol: 'Cholesterol Assessment',
+        pcos_risk: 'PCOS Risk Assessment',
+        bmi: 'BMI Calculation',
+        heart_health: 'Heart Health Assessment',
+        diabetes_risk: 'Diabetes Risk Assessment',
+      };
+      list.push({
+        id: `calc_${calc._id}`,
+        date: new Date(calc.createdAt),
+        type: 'calculator',
+        title: labels[calc.calculatorType] || `${calc.calculatorType.replace(/_/g, ' ')} completed`,
+        subtitle: calc.resultSummary,
+        badge: calc.outputs?.status || calc.outputs?.category || calc.outputs?.classification || 'Logged',
+        badgeVariant: 'success',
+        icon: HeartPulse,
+        colorClass: 'bg-amber-500/10 text-amber-600 dark:bg-amber-950/40',
+      });
+    });
+
     list.sort((a, b) => b.date.getTime() - a.date.getTime());
     setTimeline(list);
-  }, [appointmentsData, prescriptionsData, recordsData]);
+  }, [appointmentsData, prescriptionsData, recordsData, calcHistoryData]);
 
-  const timelineLoading = appointmentsLoading || prescriptionsLoading || recordsLoading;
+  const timelineLoading = appointmentsLoading || prescriptionsLoading || recordsLoading || calcHistoryLoading;
 
   return (
     <div className="space-y-6">
@@ -169,10 +227,46 @@ export default function PatientProfile() {
         </div>
       </div>
 
+      {/* Health Metrics Summary */}
+      <Card className="border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm">
+        <CardHeader className="pb-3 border-b dark:border-slate-800/80">
+          <CardTitle className="text-base flex items-center gap-2 text-slate-850 dark:text-white font-black">
+            <HeartPulse className="h-5 w-5 text-rose-500" /> Latest Health Metrics
+            {healthScore != null && (
+              <Badge variant="success" className="ml-auto text-[10px] font-bold">Health Score: {healthScore}</Badge>
+            )}
+          </CardTitle>
+          <CardDescription>From calculators and assessments — persists across sessions</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-4">
+          {metricsLoading ? (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              {metricCards.map(({ key, label, icon: Icon, format }) => {
+                const m = latestMetrics[key];
+                return (
+                  <div key={key} className="p-3 rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-900/30">
+                    <div className="flex items-center gap-1.5 mb-1">
+                      <Icon className="h-3.5 w-3.5 text-teal-600" />
+                      <p className="text-[10px] font-bold text-slate-400 uppercase">{label}</p>
+                    </div>
+                    <p className="text-sm font-black text-slate-800 dark:text-slate-200">{format(m)}</p>
+                    {m?.riskLevel && <p className="text-[9px] text-slate-500 mt-0.5">{m.riskLevel}</p>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
       {/* Stats Counter Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         {[
-          { label: 'Consultations booked', count: appointments.length, icon: Calendar, color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/20' },
+          { label: 'Past consultations', count: appointments.length, icon: Calendar, color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/20' },
           { label: 'Active prescriptions', count: prescriptions.length, icon: Pill, color: 'text-indigo-650 bg-indigo-50 dark:bg-indigo-950/20' },
           { label: 'Uploaded Health Files', count: records.length, icon: FileText, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20' },
         ].map((stat) => (
@@ -247,6 +341,61 @@ export default function PatientProfile() {
               </form>
             </CardContent>
           </Card>
+
+          {/* Health Twin Card in Profile */}
+          <Card className="border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm mt-6">
+            <CardHeader className="pb-3 border-b dark:border-slate-800/80">
+              <CardTitle className="text-base flex items-center gap-2 text-slate-850 dark:text-white font-black">
+                <Sparkles className="h-5 w-5 text-indigo-500 animate-pulse" /> Health Twin Score: {twinData?.data?.healthTwinScore ?? '—'}
+              </CardTitle>
+              <CardDescription>Estimated biological age: {twinData?.data?.biologicalAgeEstimate ?? '—'} yrs</CardDescription>
+            </CardHeader>
+            <CardContent className="pt-4 space-y-4">
+              {/* Top Risks */}
+              <div>
+                <p className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mb-2">Top Risk Factors</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {predictionsData?.data?.filter(p => p.score >= 50).map(p => (
+                    <Badge key={p.predictionType} className="bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 border border-rose-200/50 text-[10px] font-bold">
+                      ⚠️ {p.predictionType.charAt(0).toUpperCase() + p.predictionType.slice(1).replace('_', ' ')} ({p.score}%)
+                    </Badge>
+                  ))}
+                  {!predictionsData?.data?.some(p => p.score >= 50) && (
+                    <span className="text-xs text-slate-500 font-semibold">✓ Vitals within normal ranges</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Trajectory */}
+              {forecastData?.data?.forecasts && (
+                <div className="border-t dark:border-slate-800 pt-3">
+                  <p className="text-[10px] font-bold text-slate-450 uppercase tracking-wider mb-2">Forecast Trajectory</p>
+                  <div className="space-y-1 text-xs text-slate-650 dark:text-slate-400 font-semibold">
+                    {forecastData.data.forecasts.map(f => (
+                      <div key={f.days} className="flex justify-between">
+                        <span>{f.days} Days Trajectory</span>
+                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{f.score}/100</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Active Anomalies */}
+              {anomaliesData?.data?.length > 0 && (
+                <div className="border-t dark:border-slate-800 pt-3">
+                  <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-2">Active Alerts</p>
+                  <div className="space-y-2">
+                    {anomaliesData.data.slice(0, 2).map((a, i) => (
+                      <div key={i} className="text-[11px] text-rose-700 bg-rose-50/50 dark:bg-rose-950/20 p-2 rounded-lg border border-rose-100/50 leading-relaxed font-semibold">
+                        {a.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Right Side: Consolidated Health Timeline */}
@@ -268,7 +417,7 @@ export default function PatientProfile() {
                 <div className="text-center py-12 text-slate-500 border border-dashed dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/10">
                   <Activity className="h-10 w-10 text-slate-400 mx-auto mb-2 animate-pulse" />
                   <p className="font-extrabold text-slate-850 dark:text-slate-200">No medical timeline entries found</p>
-                  <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Book consultations or record diagnostic scans to build clinical history.</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Use health calculators or upload medical records to build clinical history.</p>
                 </div>
               ) : (
                 <div className="relative border-l-2 border-slate-100 dark:border-slate-800/60 ml-4 pl-6 space-y-6">

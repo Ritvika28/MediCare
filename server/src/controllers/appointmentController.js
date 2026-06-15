@@ -17,6 +17,9 @@ const populateAppointment = (query) =>
     .populate('department', 'name');
 
 export const createAppointment = asyncHandler(async (req, res) => {
+  if (req.user.role === 'patient') {
+    throw new AppError('Online appointment booking is disabled. View doctor profiles to find contact details.', 403);
+  }
   const patient = await Patient.findOne({ user: req.user._id });
   if (!patient) throw new AppError('Patient profile not found', 404);
 

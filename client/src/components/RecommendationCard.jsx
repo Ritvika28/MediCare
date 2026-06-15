@@ -25,8 +25,8 @@ export function RecommendationCard({ recommendation }) {
         )}
         {aiInsight && <p className="mt-2 text-xs text-slate-500 line-clamp-3">{aiInsight}</p>}
         {recommendedDoctor && recommendedHospital && (
-          <Link to={`/patient/book/${recommendedDoctor._id}?hospitalId=${recommendedHospital._id}&departmentId=${recommendedDepartment?._id}`}>
-            <Button className="mt-4" size="sm">Book Recommended Doctor</Button>
+          <Link to={`/patient/hospitals/${recommendedHospital._id}/doctors/${recommendedDoctor._id}`}>
+            <Button className="mt-4" size="sm">View Recommended Doctor</Button>
           </Link>
         )}
       </CardContent>

@@ -6,9 +6,14 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { Badge } from '@/components/ui/Badge';
-import { Search, Star, Filter, Calendar, Users, SlidersHorizontal, ArrowUpDown } from 'lucide-react';
+import { useCurrentLocation } from '@/hooks/useCurrentLocation';
+import { Search, Star, Filter, Calendar, Users, SlidersHorizontal, ArrowUpDown, Navigation } from 'lucide-react';
 
 export default function DoctorList() {
+  const { latitude, longitude, refetch: refetchLocation } = useCurrentLocation();
+  const hasLocation = typeof latitude === 'number' && typeof longitude === 'number';
+  const [nearMe, setNearMe] = useState(false);
+
   const [filters, setFilters] = useState({
     search: '',
     specialization: '',
@@ -24,19 +29,22 @@ export default function DoctorList() {
   });
 
   const { data, isLoading, isError } = useQuery({
-    queryKey: ['doctors-list-search', filters],
+    queryKey: ['doctors-list-search', filters, nearMe, latitude, longitude],
     queryFn: () =>
       api.get('/doctors', {
         params: {
           search: filters.search || undefined,
           specialization: filters.specialization || undefined,
-          city: filters.city || undefined,
+          city: nearMe ? undefined : (filters.city || undefined),
           minExperience: filters.minExperience || undefined,
           maxFee: filters.maxFee || undefined,
           minRating: filters.minRating || undefined,
           gender: filters.gender || undefined,
           availabilityToday: filters.availabilityToday === 'true' ? 'true' : undefined,
-          sort: filters.sort || undefined,
+          sort: nearMe ? undefined : (filters.sort || undefined),
+          latitude: nearMe && hasLocation ? latitude : undefined,
+          longitude: nearMe && hasLocation ? longitude : undefined,
+          radius: nearMe ? 50 : undefined,
           page: filters.page,
           limit: filters.limit,
         },
@@ -78,7 +86,7 @@ export default function DoctorList() {
             Consult Top Doctors Online or In-Clinic
           </h1>
           <p className="text-teal-100/90 text-sm md:text-base leading-relaxed">
-            Find the right doctor for your health needs, read verified patient reviews, and schedule appointments instantly.
+            Find the right doctor by specialty, city, or symptom. View profiles and contact details directly.
           </p>
         </div>
       </div>
@@ -110,18 +118,28 @@ export default function DoctorList() {
               />
             </div>
 
-            {/* Sort Selector */}
-            <div className="relative flex items-center gap-2">
-              <ArrowUpDown className="h-4.5 w-4.5 text-slate-400 shrink-0" />
-              <select
-                value={filters.sort}
-                onChange={(e) => handleFilterChange('sort', e.target.value)}
-                className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 focus:ring-2 focus:ring-teal-500 text-slate-850 dark:text-slate-100 shadow-inner outline-none appearance-none cursor-pointer transition"
+            {/* Near Me + Sort */}
+            <div className="flex gap-2 items-center">
+              <Button
+                type="button"
+                variant={nearMe ? 'default' : 'outline'}
+                onClick={() => { setNearMe(true); refetchLocation(); }}
+                className={`rounded-xl text-xs font-bold gap-1.5 shrink-0 ${nearMe ? 'bg-teal-600 text-white' : ''}`}
               >
-                <option value="rating">Highest Rated</option>
-                <option value="experience">Most Experienced</option>
-                <option value="fee">Lowest Consultation Fee</option>
-              </select>
+                <Navigation className="h-4 w-4" /> Near Me
+              </Button>
+              <div className="relative flex items-center gap-2 flex-1">
+                <ArrowUpDown className="h-4.5 w-4.5 text-slate-400 shrink-0" />
+                <select
+                  value={filters.sort}
+                  onChange={(e) => { setNearMe(false); handleFilterChange('sort', e.target.value); }}
+                  className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 focus:ring-2 focus:ring-teal-500 shadow-inner outline-none appearance-none cursor-pointer transition"
+                >
+                  <option value="rating">Highest Rated</option>
+                  <option value="experience">Most Experienced</option>
+                  <option value="fee">Lowest Fee</option>
+                </select>
+              </div>
             </div>
           </div>
         </CardContent>

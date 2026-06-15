@@ -17,7 +17,6 @@ const navByRole = {
     { to: '/patient', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/patient/hospitals', icon: Building2, label: 'Find Hospitals' },
     { to: '/doctors', icon: Stethoscope, label: 'Find Doctors' },
-    { to: '/patient/appointments', icon: Calendar, label: 'Appointments' },
     { to: '/patient/records', icon: FileText, label: 'Medical Records' },
     { to: '/patient/prescriptions', icon: Pill, label: 'Prescription Vault' },
     { to: '/patient/medicine-reminder', icon: Clock, label: 'Medicine Reminder' },

@@ -4,11 +4,13 @@ import { Review } from '../models/Review.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { APIFeatures } from '../utils/apiFeatures.js';
-import { calculateAvailableSlots } from '../services/slotGenerationService.js';
-import { searchDoctors } from '../services/doctorSearchService.js';
+import { searchDoctors, searchDoctorsNearby } from '../services/doctorSearchService.js';
 
 export const getDoctors = asyncHandler(async (req, res) => {
-  const { doctors, total } = await searchDoctors(req.query);
+  const hasCoords = req.query.latitude || req.query.lat;
+  const { doctors, total } = hasCoords
+    ? await searchDoctorsNearby(req.query)
+    : await searchDoctors(req.query);
 
   res.json({
     success: true,

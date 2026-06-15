@@ -1,25 +1,24 @@
-import { useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useParams, Link } from 'react-router-dom';
 import { api } from '@/api/axios';
-import { SlotSelector } from '@/components/SlotSelector';
 import { ReviewCard } from '@/components/ReviewCard';
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
-import { 
-  Star, Clock, ShieldCheck, Languages, Award, Video, 
-  MapPin, Phone, MessageSquare, AlertCircle, HeartPulse, UserPlus
+import { useCurrentLocation } from '@/hooks/useCurrentLocation';
+import {
+  Star, Clock, ShieldCheck, Languages, Award, MapPin, Phone, Mail,
+  MessageSquare, AlertCircle, HeartPulse, Navigation, Building2, FlaskConical,
+  ExternalLink,
 } from 'lucide-react';
+import { useState } from 'react';
 
 export default function DoctorProfile() {
   const { hospitalId, doctorId } = useParams();
-  const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { latitude, longitude } = useCurrentLocation();
 
-  const [selectedSlot, setSelectedSlot] = useState(null);
-  const [consultType, setConsultType] = useState('physical');
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState('');
   const [reviewError, setReviewError] = useState('');
@@ -30,16 +29,23 @@ export default function DoctorProfile() {
     queryFn: () => api.get(`/doctors/${doctorId}`).then((r) => r.data),
   });
 
+  const hospital = response?.data?.doctor?.hospital || response?.data?.doctor?.hospitalId;
+  const hId = hospitalId || hospital?._id || hospital;
+
+  const { data: nearbyLabs } = useQuery({
+    queryKey: ['doctor-nearby-labs', latitude, longitude],
+    queryFn: () => api.get('/labs', { params: { lat: latitude, lng: longitude, radius: 15, limit: 5 } }).then((r) => r.data),
+    enabled: typeof latitude === 'number' && typeof longitude === 'number',
+  });
+
+  const { data: nearbyHospitals } = useQuery({
+    queryKey: ['doctor-nearby-hospitals', latitude, longitude],
+    queryFn: () => api.get('/hospitals/nearby', { params: { latitude, longitude, maxDistance: 15000, limit: 5 } }).then((r) => r.data),
+    enabled: typeof latitude === 'number' && typeof longitude === 'number',
+  });
+
   const doctor = response?.data?.doctor;
   const reviews = response?.data?.reviews || [];
-
-  const handleBook = () => {
-    if (!selectedSlot) return;
-    
-    navigate(
-      `/patient/book/${doctorId}?hospitalId=${hospitalId || doctor?.hospitalId || doctor?.hospital}&type=${consultType}&date=${selectedSlot.date.toISOString()}&time=${selectedSlot.time}`
-    );
-  };
 
   const addReviewMutation = useMutation({
     mutationFn: (newReview) => api.post('/reviews', newReview),
@@ -47,285 +53,158 @@ export default function DoctorProfile() {
       setReviewSuccess(true);
       setReviewComment('');
       setReviewRating(5);
-      setReviewError('');
-      queryClient.invalidateQueries(['doctor', doctorId]);
+      queryClient.invalidateQueries({ queryKey: ['doctor', doctorId] });
     },
-    onError: (err) => {
-      setReviewError(err.response?.data?.message || 'Error submitting review');
-    }
+    onError: (err) => setReviewError(err.response?.data?.message || 'Error submitting review'),
   });
-
-  const handleReviewSubmit = (e) => {
-    e.preventDefault();
-    setReviewSuccess(false);
-    setReviewError('');
-
-    if (!reviewComment.trim()) {
-      setReviewError('Review comment cannot be empty.');
-      return;
-    }
-
-    addReviewMutation.mutate({
-      doctorId,
-      rating: reviewRating,
-      comment: reviewComment,
-    });
-  };
 
   if (isLoading) return <Skeleton className="h-96 w-full rounded-xl" />;
   if (isError || !doctor) return <div className="text-center py-12"><p className="text-slate-500">Doctor Profile Not Found</p></div>;
 
   const user = doctor.user;
-  const qualifications = doctor.qualification || doctor.education?.map((edu) => `${edu.degree} (${edu.institution}, ${edu.year})`).join(', ') || 'MBBS, MD';
-  const wait = doctor.waitingTime || (doctor.currentQueue || 0) * (doctor.averageConsultationTime || 30);
+  const hospitalData = typeof hospital === 'object' ? hospital : null;
+  const qualifications = doctor.qualification || doctor.education?.map((e) => `${e.degree} (${e.institution})`).join(', ') || 'MBBS, MD';
+  const address = hospitalData?.address;
+  const fullAddress = [address?.street, address?.city, address?.state, address?.pincode].filter(Boolean).join(', ');
+  const mapsUrl = fullAddress
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
+    : address?.city ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${hospitalData?.name} ${address.city}`)}` : null;
 
   return (
     <div className="space-y-6">
-      {/* Back link */}
-      <Link to="/patient/hospitals">
-        <Button variant="ghost" size="sm" className="mb-2">← Back to Discovery</Button>
+      <Link to={hId ? `/patient/hospitals/${hId}` : '/doctors'}>
+        <Button variant="ghost" size="sm" className="mb-2">← Back</Button>
       </Link>
 
-      {/* Profile Header */}
       <div className="rounded-2xl bg-gradient-to-br from-teal-600 to-cyan-700 p-6 md:p-8 text-white relative overflow-hidden shadow-lg">
-        <div className="absolute right-0 top-0 translate-x-6 -translate-y-6 opacity-10">
-          <HeartPulse className="h-64 w-64" />
-        </div>
         <div className="flex flex-col md:flex-row gap-6 items-center relative z-10">
           {user?.avatar ? (
-            <img
-              src={user.avatar}
-              alt={user.fullName}
-              className="h-28 w-28 rounded-full object-cover border-4 border-white/20 shadow-md"
-            />
+            <img src={user.avatar} alt="" className="h-28 w-28 rounded-full object-cover border-4 border-white/20" />
           ) : (
-            <div className="h-28 w-28 rounded-full bg-white/10 text-white text-3xl font-extrabold flex items-center justify-center border-4 border-white/20">
+            <div className="h-28 w-28 rounded-full bg-white/10 text-3xl font-extrabold flex items-center justify-center border-4 border-white/20">
               {user?.firstName?.[0]}{user?.lastName?.[0]}
             </div>
           )}
-
           <div className="text-center md:text-left flex-1 space-y-2">
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-2">
               <h1 className="text-3xl font-extrabold">Dr. {user?.firstName} {user?.lastName}</h1>
-              {doctor.isVerified && (
-                <Badge className="bg-white/20 text-white flex items-center gap-1">
-                  <ShieldCheck className="h-3.5 w-3.5" /> Verified
-                </Badge>
-              )}
+              {doctor.isVerified && <Badge className="bg-white/20 text-white"><ShieldCheck className="h-3.5 w-3.5" /> Verified</Badge>}
             </div>
-            
-            <p className="text-teal-100 font-semibold tracking-wide uppercase text-sm">{doctor.specialization}</p>
-            <p className="text-teal-50/80 text-xs md:text-sm font-medium">{qualifications}</p>
-            
-            <div className="flex flex-wrap items-center justify-center md:justify-start gap-4 text-xs font-semibold pt-1">
-              <span className="flex items-center gap-1.5"><Award className="h-4 w-4" /> {doctor.experience || doctor.experienceYears || 0} Yrs Experience</span>
-              <span className="flex items-center gap-1.5"><Languages className="h-4 w-4" /> {(doctor.languages || ['English', 'Hindi']).join(', ')}</span>
+            <p className="text-teal-100 font-semibold uppercase text-sm">{doctor.specialization}</p>
+            <p className="text-teal-50/80 text-sm">{qualifications}</p>
+            <div className="flex flex-wrap gap-4 text-xs font-semibold">
+              <span className="flex items-center gap-1"><Award className="h-4 w-4" /> {doctor.experience || 0} Yrs</span>
+              <span className="flex items-center gap-1"><Star className="h-4 w-4 fill-amber-400" /> {doctor.rating?.toFixed(1) || '—'} ({doctor.reviewCount || 0} reviews)</span>
+              <span className="flex items-center gap-1"><Languages className="h-4 w-4" /> {(doctor.languages || ['English', 'Hindi']).join(', ')}</span>
             </div>
           </div>
-
-          <div className="bg-white/10 backdrop-blur rounded-xl p-4 text-center min-w-[150px] border border-white/10 shadow-sm shrink-0">
-            <span className="text-[10px] text-teal-100 font-bold block uppercase tracking-wider">CONSULTATION FEE</span>
-            <span className="text-3xl font-black block mt-1">₹{doctor.consultationFee || 500}</span>
-            <span className="text-[10px] text-teal-100/90 font-medium block mt-1">Pay at clinic or online</span>
+          <div className="bg-white/10 backdrop-blur rounded-xl p-4 text-center min-w-[150px] border border-white/10">
+            <span className="text-[10px] font-bold block uppercase">Consultation Fee</span>
+            <span className="text-3xl font-black">₹{doctor.consultationFee || 500}</span>
           </div>
         </div>
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="lg:col-span-2 space-y-6">
-          {/* Bio & Clinic Info */}
-          <Card className="border border-slate-100 dark:border-slate-800">
-            <CardHeader><CardTitle className="text-lg">Biography & Specialty</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
+          <Card>
+            <CardHeader><CardTitle>Biography</CardTitle></CardHeader>
+            <CardContent>
               <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-                {doctor.bio || `Dr. ${user?.firstName} ${user?.lastName} is a highly accomplished ${doctor.specialization} specialist committed to delivering exceptional patient-centric care. Providing services at MediCare partner centers, using advanced diagnostic resources.`}
+                {doctor.bio || `Dr. ${user?.firstName} ${user?.lastName} is a ${doctor.specialization} specialist with ${doctor.experience || 0} years of experience.`}
               </p>
-              
-              {/* Queue Status Prediction */}
-              <div className="rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 p-4 grid grid-cols-2 sm:grid-cols-3 gap-4 items-center">
-                <div className="flex items-center gap-2">
-                  <div className="h-9 w-9 rounded-full bg-teal-100 dark:bg-teal-950/40 text-teal-650 dark:text-teal-450 flex items-center justify-center shrink-0">
-                    <UserPlus className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold block">CURRENT QUEUE</span>
-                    <span className="text-sm font-bold">{doctor.currentQueue || 0} Patients</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className="h-9 w-9 rounded-full bg-blue-100 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
-                    <Clock className="h-5 w-5" />
-                  </div>
-                  <div>
-                    <span className="text-[10px] text-slate-400 dark:text-slate-500 font-semibold block">EST. WAITING TIME</span>
-                    <span className="text-sm font-bold">~{wait || 15} Mins</span>
-                  </div>
-                </div>
-
-                <div className="col-span-2 sm:col-span-1 text-xs text-slate-400 dark:text-slate-500 font-medium">
-                  Queue updates in real-time on consult days.
-                </div>
-              </div>
             </CardContent>
           </Card>
 
-          {/* Booking Slots Selector */}
-          <Card className="border border-slate-100 dark:border-slate-800">
-            <CardHeader><CardTitle className="text-lg">Schedule Consultation</CardTitle></CardHeader>
-            <CardContent className="space-y-4">
-              {/* Consultation Type Selectors */}
-              <div className="space-y-2">
-                <label className="text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Select Consultation Type
-                </label>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {[
-                    { value: 'physical', label: 'In-Clinic Visit', icon: MapPin },
-                    { value: 'video', label: 'Video Call', icon: Video },
-                    { value: 'audio', label: 'Audio Call', icon: Phone },
-                    { value: 'chat', label: 'Chat Consult', icon: MessageSquare },
-                  ].map((mode) => {
-                    const isSelected = consultType === mode.value;
-                    const isSupported = doctor.consultationModes?.includes(mode.value) || mode.value === 'physical';
-                    
-                    return (
-                      <button
-                        key={mode.value}
-                        type="button"
-                        disabled={!isSupported}
-                        onClick={() => setConsultType(mode.value)}
-                        className={`flex flex-col items-center justify-center p-3 rounded-xl border text-center transition ${
-                          isSelected
-                            ? 'bg-teal-55 border-teal-500 text-teal-700 dark:bg-teal-950/20 dark:border-teal-700 dark:text-teal-400'
-                            : isSupported
-                            ? 'bg-white border-slate-200 dark:bg-slate-900 dark:border-slate-800 text-slate-655 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-850'
-                            : 'opacity-40 cursor-not-allowed bg-slate-50 dark:bg-slate-850 text-slate-400 border-slate-200 dark:border-slate-800'
-                        }`}
-                      >
-                        <mode.icon className={`h-5 w-5 mb-1.5 ${isSelected ? 'text-teal-650 dark:text-teal-400' : 'text-slate-400'}`} />
-                        <span className="text-xs font-bold">{mode.label}</span>
-                        {!isSupported && <span className="text-[8px] uppercase mt-0.5 text-slate-455">Unsupported</span>}
-                      </button>
-                    );
-                  })}
+          {hospitalData && (
+            <Card>
+              <CardHeader><CardTitle className="flex items-center gap-2"><Building2 className="h-5 w-5" /> Hospital & Contact</CardTitle></CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <p className="font-bold text-slate-900 dark:text-white">{hospitalData.name}</p>
+                  {fullAddress && <p className="text-sm text-slate-500 mt-1 flex items-start gap-2"><MapPin className="h-4 w-4 shrink-0 mt-0.5" />{fullAddress}</p>}
                 </div>
-              </div>
-
-              {/* Slots select component */}
-              <SlotSelector
-                doctorId={doctorId}
-                onSelectSlot={setSelectedSlot}
-                selectedSlot={selectedSlot}
-              />
-
-              {/* Confirm Booking CTA */}
-              <div className="pt-4 border-t dark:border-slate-800/80 flex items-center justify-between gap-4">
-                {selectedSlot ? (
-                  <p className="text-xs text-slate-500 font-semibold">
-                    Selected: <span className="text-teal-600 font-bold">{selectedSlot.time}</span> on{' '}
-                    <span className="text-teal-650 font-bold">
-                      {selectedSlot.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                    </span>
-                  </p>
-                ) : (
-                  <p className="text-xs text-slate-400 italic">Please select a date and slot above to book.</p>
+                <div className="flex flex-wrap gap-3">
+                  {hospitalData.phone && (
+                    <a href={`tel:${hospitalData.phone}`} className="inline-flex items-center gap-2 text-sm font-bold text-teal-600 hover:underline">
+                      <Phone className="h-4 w-4" /> {hospitalData.phone}
+                    </a>
+                  )}
+                  {user?.phone && (
+                    <span className="inline-flex items-center gap-2 text-sm text-slate-600"><Phone className="h-4 w-4" /> Clinic: {user.phone}</span>
+                  )}
+                  {user?.email && (
+                    <a href={`mailto:${user.email}`} className="inline-flex items-center gap-2 text-sm text-slate-600 hover:underline"><Mail className="h-4 w-4" /> {user.email}</a>
+                  )}
+                </div>
+                {mapsUrl && (
+                  <a href={mapsUrl} target="_blank" rel="noopener noreferrer">
+                    <Button variant="outline" className="gap-2 font-bold text-xs"><Navigation className="h-4 w-4" /> Get Directions <ExternalLink className="h-3 w-3" /></Button>
+                  </a>
                 )}
-                
-                <Button
-                  onClick={handleBook}
-                  disabled={!selectedSlot}
-                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold px-6 shadow-md"
-                >
-                  Confirm Appointment
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
+                <Link to={`/patient/hospitals/${hId}`}>
+                  <Button className="bg-teal-600 hover:bg-teal-700 text-white font-bold">View Hospital Profile</Button>
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {(nearbyLabs?.data?.length > 0 || nearbyHospitals?.data?.length > 0) && (
+            <div className="grid gap-4 md:grid-cols-2">
+              {nearbyLabs?.data?.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-sm flex items-center gap-2"><FlaskConical className="h-4 w-4" /> Nearby Labs</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    {nearbyLabs.data.slice(0, 4).map((lab) => (
+                      <p key={lab._id} className="text-xs font-semibold text-slate-600">{lab.name} — {lab.address?.city}</p>
+                    ))}
+                    <Link to="/patient/nearby-labs" className="text-xs font-bold text-teal-600 hover:underline">View all labs</Link>
+                  </CardContent>
+                </Card>
+              )}
+              {nearbyHospitals?.data?.length > 0 && (
+                <Card>
+                  <CardHeader><CardTitle className="text-sm flex items-center gap-2"><HeartPulse className="h-4 w-4" /> Nearby Hospitals</CardTitle></CardHeader>
+                  <CardContent className="space-y-2">
+                    {nearbyHospitals.data.slice(0, 4).map((h) => (
+                      <p key={h._id} className="text-xs font-semibold text-slate-600">{h.name} {h.distance != null ? `(${h.distance} km)` : ''}</p>
+                    ))}
+                    <Link to="/patient/hospitals" className="text-xs font-bold text-teal-600 hover:underline">Find hospitals</Link>
+                  </CardContent>
+                </Card>
+              )}
+            </div>
+          )}
         </div>
 
-        {/* Right Column - Reviews & Submit Review Form */}
         <div className="space-y-6">
-          <Card className="border border-slate-100 dark:border-slate-800">
-            <CardHeader className="border-b pb-3 dark:border-slate-800/80">
-              <CardTitle className="text-lg flex items-center gap-2">
-                <Star className="h-5 w-5 text-amber-500 fill-amber-500" /> Patient Reviews
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-4 space-y-4 max-h-[400px] overflow-y-auto scrollbar-thin">
-              {reviews.length === 0 ? (
-                <div className="text-center p-6 text-slate-500">
-                  <MessageSquare className="h-8 w-8 text-slate-400 mx-auto mb-2" />
-                  <p className="text-sm font-semibold">No reviews yet</p>
-                  <p className="text-xs text-slate-405 mt-0.5">Be the first to review Dr. {user?.firstName}</p>
-                </div>
-              ) : (
-                reviews.map((rev) => <ReviewCard key={rev._id} review={rev} />)
-              )}
+          <Card>
+            <CardHeader><CardTitle className="flex items-center gap-2"><Star className="h-5 w-5 text-amber-500" /> Reviews</CardTitle></CardHeader>
+            <CardContent className="space-y-4 max-h-[300px] overflow-y-auto">
+              {reviews.length === 0 ? <p className="text-sm text-slate-500 text-center py-4">No reviews yet</p> : reviews.map((r) => <ReviewCard key={r._id} review={r} />)}
             </CardContent>
           </Card>
 
-          <Card className="border border-slate-100 dark:border-slate-800">
+          <Card>
             <CardHeader><CardTitle className="text-base">Write a Review</CardTitle></CardHeader>
             <CardContent>
               {reviewSuccess ? (
-                <div className="text-center py-4 bg-emerald-50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30 rounded-xl">
-                  <p className="text-sm font-bold text-emerald-800 dark:text-emerald-400">Review submitted successfully!</p>
-                  <p className="text-xs text-slate-400 mt-0.5">Thank you for sharing your feedback.</p>
-                </div>
+                <p className="text-sm font-bold text-emerald-600 text-center py-4">Review submitted!</p>
               ) : (
-                <form onSubmit={handleReviewSubmit} className="space-y-4">
-                  {reviewError && (
-                    <div className="p-3 text-xs bg-red-50 dark:bg-red-950 border border-red-100 dark:border-red-900 rounded-lg text-red-750 dark:text-red-300 flex items-center gap-2">
-                      <AlertCircle className="h-4 w-4 shrink-0" />
-                      <span>{reviewError}</span>
-                    </div>
-                  )}
-
-                  {/* Rating Selector */}
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-550 uppercase tracking-wider block">Rating</span>
-                    <div className="flex gap-1.5">
-                      {[1, 2, 3, 4, 5].map((star) => (
-                        <button
-                          key={star}
-                          type="button"
-                          onClick={() => setReviewRating(star)}
-                          className="focus:outline-none transition transform hover:scale-110"
-                        >
-                          <Star
-                            className={`h-6 w-6 ${
-                              star <= reviewRating
-                                ? 'fill-amber-500 stroke-amber-500'
-                                : 'stroke-slate-350 fill-none dark:stroke-slate-700'
-                            }`}
-                          />
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Feedback Textarea */}
-                  <div className="space-y-1">
-                    <span className="text-xs font-semibold text-slate-550 uppercase tracking-wider block">Your Review</span>
-                    <textarea
-                      rows={3}
-                      value={reviewComment}
-                      onChange={(e) => setReviewComment(e.target.value)}
-                      placeholder="Share your consultation experience (wait time, doctor bedside manner, etc.)..."
-                      className="w-full text-xs rounded-lg border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850 p-2.5 focus:ring-2 focus:ring-teal-500 text-slate-800 dark:text-slate-100"
-                    />
-                  </div>
-
-                  <Button
-                    type="submit"
-                    disabled={addReviewMutation.isPending}
-                    className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-2 shadow"
-                  >
-                    Submit Feedback
-                  </Button>
+                <form onSubmit={(e) => { e.preventDefault(); if (reviewComment.trim()) addReviewMutation.mutate({ doctorId, rating: reviewRating, comment: reviewComment }); }} className="space-y-4">
+                  {reviewError && <p className="text-xs text-rose-600 flex items-center gap-1"><AlertCircle className="h-4 w-4" />{reviewError}</p>}
+                  <div className="flex gap-1">{[1,2,3,4,5].map((s) => <button key={s} type="button" onClick={() => setReviewRating(s)}><Star className={`h-6 w-6 ${s <= reviewRating ? 'fill-amber-500 stroke-amber-500' : 'stroke-slate-300'}`} /></button>)}</div>
+                  <textarea rows={3} value={reviewComment} onChange={(e) => setReviewComment(e.target.value)} placeholder="Share your experience..." className="w-full text-xs rounded-lg border p-2.5 dark:bg-slate-900 dark:border-slate-800" />
+                  <Button type="submit" disabled={addReviewMutation.isPending} className="w-full bg-teal-600 text-white font-bold text-xs">Submit</Button>
                 </form>
               )}
+            </CardContent>
+          </Card>
+
+          <Card className="border-rose-200 dark:border-rose-900/50">
+            <CardContent className="p-4 text-center space-y-2">
+              <p className="text-xs font-bold text-slate-500">Medical Emergency?</p>
+              <Link to="/patient/emergency-hub"><Button variant="outline" className="w-full text-rose-600 border-rose-300 font-bold text-xs">Emergency SOS</Button></Link>
             </CardContent>
           </Card>
         </div>

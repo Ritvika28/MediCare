@@ -3,6 +3,7 @@ import { EmergencyRequest } from '../models/EmergencyRequest.js';
 import { Patient } from '../models/Patient.js';
 import { getGoogleMapsRouteUrl } from './locationService.js';
 import { createNotification } from './notificationService.js';
+import { generateSOSNotifications } from './notificationEngineService.js';
 import { User } from '../models/User.js';
 
 export const findNearestEmergencyHospital = async (latitude, longitude) => {
@@ -77,9 +78,21 @@ export const createEmergencyRequest = async (userId, body) => {
         title: 'Emergency Request',
         message: `New emergency from patient at ${body.address || 'unknown location'}`,
         data: { emergencyId: emergency._id },
+        priority: 'critical',
       })
     )
   );
+
+  await generateSOSNotifications(userId, 'sos_activated', { emergencyId: emergency._id });
+  if (patient.emergencyContact?.phone) {
+    await generateSOSNotifications(userId, 'contact_notified', { contactName: patient.emergencyContact.name });
+  }
+  if (latitude && longitude) {
+    await generateSOSNotifications(userId, 'location_shared', { latitude, longitude });
+  }
+  if (nearest?.hospital) {
+    await generateSOSNotifications(userId, 'hospital_found', { hospitalName: nearest.hospital.name });
+  }
 
   return {
     emergency,

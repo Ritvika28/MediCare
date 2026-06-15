@@ -1,11 +1,9 @@
 import { Patient } from '../models/Patient.js';
 import { User } from '../models/User.js';
-import { Appointment } from '../models/Appointment.js';
 import { MedicalRecord } from '../models/MedicalRecord.js';
 import { Reminder } from '../models/Reminder.js';
 import { Prescription } from '../models/Prescription.js';
 import { HealthAssessment } from '../models/HealthAssessment.js';
-import { HealthCalculatorHistory } from '../models/HealthCalculatorHistory.js';
 import { Hospital } from '../models/Hospital.js';
 import { Lab } from '../models/Lab.js';
 import { BloodBank } from '../models/BloodBank.js';
@@ -13,6 +11,9 @@ import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { APIFeatures } from '../utils/apiFeatures.js';
 import { calculateHealthScore, getHealthAlerts } from '../services/healthScoreService.js';
+import { getHealthAnalytics, buildHealthTimeline } from '../services/healthAnalyticsService.js';
+import { getLatestMetrics } from '../services/healthMetricService.js';
+import { getNearbyHealthcareSummary } from '../services/nearbySummaryService.js';
 
 export const getProfile = asyncHandler(async (req, res) => {
   const patient = await Patient.findOne({ user: req.user._id }).populate('user', '-password');
@@ -54,12 +55,11 @@ export const getHealthScore = asyncHandler(async (req, res) => {
   const patient = await Patient.findOne({ user: req.user._id });
   if (!patient) throw new AppError('Patient profile not found', 404);
 
-  const [appointments, records] = await Promise.all([
-    Appointment.find({ patient: patient._id }),
+  const [records] = await Promise.all([
     MedicalRecord.find({ patient: patient._id }),
   ]);
 
-  const score = calculateHealthScore(patient, appointments, records);
+  const score = calculateHealthScore(patient, records);
   const alerts = getHealthAlerts(patient, score);
 
   res.json({ success: true, data: { score, alerts } });
@@ -104,86 +104,50 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     takenToday: r.logs.filter(l => l.date === todayStr && l.status === 'taken').map(l => l.time)
   }));
 
-  // 3. Appointments
-  const appointments = await Appointment.find({ patient: patient._id })
-    .sort('scheduledAt')
-    .populate({ path: 'doctor', populate: { path: 'user', select: 'firstName lastName avatar' } })
-    .populate('hospital', 'name');
-
-  const upcomingAppointments = appointments.filter(a => ['pending', 'confirmed'].includes(a.status)).slice(0, 3);
-  const completedAppointmentsCount = appointments.filter(a => a.status === 'completed').length;
-
-  // 4. Medical Records & Prescriptions
+  // 3. Medical Records & Prescriptions
   const [records, prescriptions] = await Promise.all([
     MedicalRecord.find({ patient: patient._id }).sort('-recordDate').limit(3),
     Prescription.find({ patient: patient._id }).sort('-createdAt').limit(3)
       .populate({ path: 'doctor', populate: { path: 'user', select: 'firstName lastName' } })
   ]);
 
-  // 5. Health Risk Assessment
+  // 4. Health Risk Assessment
   const assessment = await HealthAssessment.findOne({ patient: patient._id }).sort('-createdAt');
   const riskScore = assessment ? assessment.riskScore : null;
   const riskLevel = assessment ? (assessment.riskScore < 30 ? 'low' : assessment.riskScore < 70 ? 'moderate' : 'high') : 'unknown';
 
-  // 6. Calculator History (BMI, Calorie, Water)
-  const calcHistory = await HealthCalculatorHistory.find({ patient: patient._id }).sort('-createdAt').limit(30);
+  // 5. Health analytics (calculators, vitals, timeline)
+  const analytics = await getHealthAnalytics(patient._id, patient, { range: '30d' });
+  const { latest, scores, insights } = analytics;
 
-  // Latest BMI
-  const latestBmiCalc = calcHistory.find(c => c.calculatorType === 'bmi');
-  const bmi = latestBmiCalc ? parseFloat(latestBmiCalc.outputs.bmi) : (assessment ? parseFloat((assessment.answers.weight / Math.pow(assessment.answers.height / 100, 2)).toFixed(1)) : 22.5);
+  const bmi = latest.bmi ?? (assessment ? parseFloat((assessment.answers.weight / Math.pow(assessment.answers.height / 100, 2)).toFixed(1)) : null);
+  const calories = latest.calories ?? null;
+  const waterIntake = latest.waterIntake ?? 0;
+  const waterTarget = latest.waterTarget ?? 3.0;
 
-  // Latest Calorie Needs
-  const latestCalorie = calcHistory.find(c => c.calculatorType === 'calorie');
-  const calories = latestCalorie ? Math.round(latestCalorie.outputs.calorieNeeds || latestCalorie.outputs.bmr * 1.2 || 2000) : 2000;
+  // 6. Base Health Score
+  const healthScore = calculateHealthScore(patient, records);
 
-  // Today's water intake
-  const todayWaterLogs = calcHistory.filter(c => c.calculatorType === 'water_intake' && new Date(c.createdAt).toISOString().split('T')[0] === todayStr);
-  const waterIntake = todayWaterLogs.reduce((acc, log) => acc + parseFloat(log.inputs.amount || log.outputs.waterIntakeLiters || 0), 0);
-  const waterTarget = 3.0; // default 3 Liters
+  // 7. Dynamic health tips from insights
+  const healthTips = insights?.length > 0
+    ? insights.slice(0, 5).map((ins, i) => ({
+        id: i + 1,
+        category: ins.metric?.toLowerCase() || 'general',
+        tip: ins.message,
+      }))
+    : [
+        { id: 1, category: 'hydration', tip: `Daily water target: ${waterTarget}L. Log intake from your dashboard.` },
+        { id: 2, category: 'vitals', tip: 'Track blood pressure and blood sugar regularly for better health insights.' },
+      ];
 
-  // 7. Base Health Score
-  const healthScore = calculateHealthScore(patient, appointments, records);
-
-  // 8. Health Tips
-  const healthTips = [
-    { id: 1, category: 'hydration', tip: 'Drink at least 3 liters of water today to support cellular regeneration.' },
-    { id: 2, category: 'exercise', tip: 'A quick 15-minute walk after meals helps regulate blood sugar spikes.' },
-    { id: 3, category: 'sleep', tip: 'Avoid blue light screens for 1 hour before bedtime to secrete natural melatonin.' },
-    { id: 4, category: 'diet', tip: 'Include antioxidant-rich berries and almonds in your breakfast routine.' },
-    { id: 5, category: 'stress', tip: 'Practice 4-7-8 breathing exercises for 2 minutes to reduce physical cortisol.' }
-  ];
-
-  // 9. Activity Timeline
-  const activityTimeline = [];
-  appointments.forEach(a => {
-    activityTimeline.push({
-      id: `apt-${a._id}`,
-      type: 'appointment',
-      title: `Appointment with Dr. ${a.doctor?.user?.firstName || ''} ${a.doctor?.user?.lastName || ''}`,
-      date: a.scheduledAt,
-      status: a.status
-    });
-  });
-  records.forEach(r => {
-    activityTimeline.push({
-      id: `rec-${r._id}`,
-      type: 'medical_record',
-      title: `Medical Record uploaded: ${r.title}`,
-      date: r.recordDate || r.createdAt,
-      status: 'completed'
-    });
-  });
-  prescriptions.forEach(p => {
-    activityTimeline.push({
-      id: `rx-${p._id}`,
-      type: 'prescription',
-      title: `New prescription issued by Dr. ${p.doctor?.user?.firstName || ''} ${p.doctor?.user?.lastName || ''}`,
-      date: p.createdAt,
-      status: 'active'
-    });
-  });
-  // Sort timeline newest first
-  activityTimeline.sort((a, b) => new Date(b.date) - new Date(a.date));
+  // 8. Activity Timeline (includes calculator events)
+  const activityTimeline = (await buildHealthTimeline(patient._id, 8)).map((item) => ({
+    id: item.id,
+    type: item.type,
+    title: item.title,
+    date: item.date,
+    status: item.status,
+  }));
 
   res.json({
     success: true,
@@ -193,20 +157,60 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
       riskLevel,
       todayMedicines: todayReminders,
       overallAdherence,
-      upcomingAppointments,
-      completedAppointmentsCount,
       nearbyHospitalsCount: hospitalsCount,
       nearbyLabsCount: labsCount,
       bloodBanksCount,
+      analyticsScores: scores,
+      analyticsInsights: insights?.slice(0, 4) || [],
       bmi,
       calories,
       waterIntake,
       waterTarget,
+      bloodPressure: latest.bloodPressure,
+      bloodPressureStatus: latest.bloodPressureStatus,
+      bloodSugar: latest.bloodSugar,
+      bloodSugarStatus: latest.bloodSugarStatus,
+      sleepScore: latest.sleepScore,
+      sleepStatus: latest.sleepStatus,
+      stressLevel: latest.stressLevel,
+      heartScore: latest.heartScore,
       recentPrescriptions: prescriptions,
       recentReports: records,
-      activityTimeline: activityTimeline.slice(0, 5),
-      healthTips
+      activityTimeline,
+      healthTips,
+      recentAssessment: assessment ? {
+        healthScore: assessment.healthScore,
+        riskScore: assessment.riskScore,
+        date: assessment.createdAt,
+      } : null,
     }
+  });
+});
+
+export const getNearbySummary = asyncHandler(async (req, res) => {
+  const latitude = req.query.latitude ?? req.query.lat;
+  const longitude = req.query.longitude ?? req.query.lng;
+  const radius = parseFloat(req.query.radius) || 50;
+
+  const summary = await getNearbyHealthcareSummary(latitude, longitude, radius);
+  res.json({ success: true, data: summary });
+});
+
+export const getHealthMetrics = asyncHandler(async (req, res) => {
+  const patient = await Patient.findOne({ user: req.user._id });
+  if (!patient) throw new AppError('Patient profile not found', 404);
+
+  const types = ['bmi', 'blood_pressure', 'blood_sugar', 'sleep_assessment', 'stress_assessment', 'kidney_health', 'liver_health', 'heart_health', 'diabetes_risk'];
+  const latest = await getLatestMetrics(patient._id, types);
+  const healthScore = calculateHealthScore(patient, records);
+
+  res.json({
+    success: true,
+    data: {
+      latest,
+      healthScore,
+      assessments: await HealthAssessment.find({ patient: patient._id }).sort('-createdAt').limit(10),
+    },
   });
 });
 

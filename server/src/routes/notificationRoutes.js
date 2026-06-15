@@ -7,7 +7,10 @@ const router = Router();
 router.use(protect);
 
 router.get('/', notificationController.getNotifications);
-router.patch('/:id/read', notificationController.markAsRead);
+router.get('/summary', notificationController.getNotificationSummary);
 router.patch('/read-all', notificationController.markAllRead);
+router.delete('/read-all', notificationController.deleteAllRead);
+router.patch('/:id/read', notificationController.markAsRead);
+router.delete('/:id', notificationController.deleteNotification);
 
 export default router;

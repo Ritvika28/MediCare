@@ -71,8 +71,8 @@ export default function Doctors() {
                   </div>
                 </div>
                 {isAuthenticated && (
-                  <Link to={`/patient/book/${doc._id}`} className="mt-4 block">
-                    <Button className="w-full" size="sm">Book Appointment</Button>
+                  <Link to={`/patient/doctors/${doc._id}`} className="mt-4 block">
+                    <Button className="w-full" size="sm">View Doctor Profile</Button>
                   </Link>
                 )}
               </CardContent>

@@ -1,19 +1,40 @@
 import { useState, useEffect, useRef } from 'react';
-import { useMutation, useQuery } from '@tanstack/react-query';
-import { AlertTriangle, Ambulance, Phone, MapPin, Navigation, User, HeartPulse, Activity } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { AlertTriangle, Ambulance, Phone, MapPin, Navigation, User, HeartPulse, Activity, Plus, Trash2, Edit2, Share2, BookOpen } from 'lucide-react';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { emergencyService } from '@/services/emergencyService';
 import { useToast } from '@/components/ui/Toast';
 import { getApiErrorMessage } from '@/api/axios';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+
+const EMERGENCY_GUIDES = [
+  { id: 'burn', title: 'Burn', steps: ['Cool with running water 15–20 min', 'Remove tight clothing/jewelry', 'Cover with clean cloth', 'Do NOT apply ice or butter', 'Seek hospital for large/deep burns'] },
+  { id: 'heart_attack', title: 'Heart Attack', steps: ['Call 102/112 immediately', 'Help sit upright, loosen clothing', 'Give aspirin 325mg if not allergic', 'Start CPR if unconscious', 'Use AED if available'] },
+  { id: 'stroke', title: 'Stroke (FAST)', steps: ['Face drooping?', 'Arm weakness?', 'Speech slurred?', 'Time to call 102 NOW', 'Note symptom onset time'] },
+  { id: 'bleeding', title: 'Severe Bleeding', steps: ['Apply direct pressure with clean cloth', 'Elevate limb above heart', 'Do not remove embedded objects', 'Use tourniquet only as last resort', 'Call ambulance'] },
+  { id: 'poisoning', title: 'Poisoning', steps: ['Call poison helpline 1800-116-117', 'Do NOT induce vomiting unless told', 'Save container/substance info', 'Rinse skin/eyes if chemical contact', 'Get to hospital'] },
+  { id: 'fracture', title: 'Fracture', steps: ['Immobilize the injured area', 'Apply ice wrapped in cloth', 'Do not try to realign bone', 'Elevate if possible', 'Transport to emergency ward'] },
+  { id: 'cpr', title: 'CPR Basics', steps: ['Check responsiveness & breathing', 'Call 102, request AED', '30 chest compressions (5–6 cm deep)', '2 rescue breaths', 'Continue until help arrives'] },
+];
 
 export default function Emergency() {
+  const queryClient = useQueryClient();
   const { latitude, longitude, loading: locLoading, error: locError, refetch: refetchLocation } = useCurrentLocation();
   const hasLocation = typeof latitude === 'number' && typeof longitude === 'number';
   
   const { toast } = useToast();
   const [description, setDescription] = useState('');
+  const [contactForm, setContactForm] = useState({ name: '', phone: '', relationship: 'Family' });
+  const [editingId, setEditingId] = useState(null);
+  const [activeGuide, setActiveGuide] = useState(null);
+
+  const { data: contactsRes, isLoading: contactsLoading } = useQuery({
+    queryKey: ['emergency-contacts'],
+    queryFn: () => emergencyService.listContacts(),
+  });
+  const contacts = contactsRes?.data || [];
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -45,6 +66,39 @@ export default function Emergency() {
     },
     onError: (err) => toast(getApiErrorMessage(err), 'error'),
   });
+
+  const contactMutation = useMutation({
+    mutationFn: (data) => editingId
+      ? emergencyService.updateContact(editingId, data)
+      : emergencyService.createContact(data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emergency-contacts'] });
+      setContactForm({ name: '', phone: '', relationship: 'Family' });
+      setEditingId(null);
+      toast(editingId ? 'Contact updated' : 'Contact added', 'success');
+    },
+    onError: (err) => toast(getApiErrorMessage(err), 'error'),
+  });
+
+  const deleteContactMutation = useMutation({
+    mutationFn: (id) => emergencyService.deleteContact(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['emergency-contacts'] });
+      toast('Contact removed', 'success');
+    },
+    onError: (err) => toast(getApiErrorMessage(err), 'error'),
+  });
+
+  const shareLocation = () => {
+    if (!hasLocation) { toast('Enable GPS first', 'error'); return; }
+    const text = `EMERGENCY: I need help. My location: https://maps.google.com/?q=${latitude},${longitude}`;
+    if (navigator.share) {
+      navigator.share({ title: 'Emergency Location', text, url: `https://maps.google.com/?q=${latitude},${longitude}` });
+    } else {
+      navigator.clipboard?.writeText(text);
+      toast('Location link copied to clipboard', 'success');
+    }
+  };
 
   // Render Leaflet Map
   useEffect(() => {
@@ -202,6 +256,79 @@ export default function Emergency() {
           </CardContent>
         </Card>
       )}
+
+      {/* Emergency Contacts */}
+      <Card className="border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <CardHeader className="pb-3 border-b dark:border-slate-800/80">
+          <CardTitle className="text-base flex items-center gap-2"><User className="h-5 w-5 text-indigo-600" /> Emergency Contacts</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-4">
+          {contactsLoading ? (
+            <p className="text-xs text-slate-500">Loading contacts...</p>
+          ) : contacts.length > 0 ? (
+            <div className="space-y-2">
+              {contacts.map((c) => (
+                <div key={c._id} className="flex items-center justify-between p-3 rounded-xl border dark:border-slate-800 bg-slate-50 dark:bg-slate-900/40">
+                  <div>
+                    <p className="font-bold text-sm">{c.name} {c.isPrimary && <span className="text-[9px] text-teal-600">(Primary)</span>}</p>
+                    <p className="text-xs text-slate-500">{c.relationship} · {c.phone}</p>
+                  </div>
+                  <div className="flex gap-1">
+                    <a href={`tel:${c.phone}`}><Button variant="outline" size="sm" className="h-8 px-2"><Phone className="h-3.5 w-3.5" /></Button></a>
+                    <Button variant="outline" size="sm" className="h-8 px-2" onClick={() => { setEditingId(c._id); setContactForm({ name: c.name, phone: c.phone, relationship: c.relationship }); }}>
+                      <Edit2 className="h-3.5 w-3.5" />
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-8 px-2 text-rose-600" onClick={() => deleteContactMutation.mutate(c._id)}>
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-500 text-center py-4">No emergency contacts yet. Add one below.</p>
+          )}
+
+          <div className="grid gap-2 pt-2 border-t dark:border-slate-800">
+            <Input placeholder="Contact name" value={contactForm.name} onChange={(e) => setContactForm((f) => ({ ...f, name: e.target.value }))} className="text-xs" />
+            <Input placeholder="Phone number" value={contactForm.phone} onChange={(e) => setContactForm((f) => ({ ...f, phone: e.target.value }))} className="text-xs" />
+            <Input placeholder="Relationship" value={contactForm.relationship} onChange={(e) => setContactForm((f) => ({ ...f, relationship: e.target.value }))} className="text-xs" />
+            <Button
+              className="w-full text-xs font-bold gap-1.5"
+              onClick={() => contactMutation.mutate({ ...contactForm, isPrimary: contacts.length === 0 })}
+              disabled={contactMutation.isPending || !contactForm.name || !contactForm.phone}
+            >
+              <Plus className="h-4 w-4" /> {editingId ? 'Update Contact' : 'Add Contact'}
+            </Button>
+          </div>
+
+          <Button variant="outline" className="w-full text-xs font-bold gap-1.5" onClick={shareLocation} disabled={!hasLocation}>
+            <Share2 className="h-4 w-4" /> Share My Location
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Emergency Guides */}
+      <Card className="border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+        <CardHeader className="pb-3 border-b dark:border-slate-800/80">
+          <CardTitle className="text-base flex items-center gap-2"><BookOpen className="h-5 w-5 text-amber-600" /> First Aid Guides</CardTitle>
+        </CardHeader>
+        <CardContent className="p-4 space-y-3">
+          <div className="flex flex-wrap gap-2">
+            {EMERGENCY_GUIDES.map((g) => (
+              <button key={g.id} onClick={() => setActiveGuide(activeGuide === g.id ? null : g.id)}
+                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition ${activeGuide === g.id ? 'bg-amber-600 text-white' : 'bg-slate-100 dark:bg-slate-900 text-slate-600'}`}>
+                {g.title}
+              </button>
+            ))}
+          </div>
+          {activeGuide && (
+            <ol className="list-decimal list-inside space-y-1 text-xs text-slate-600 dark:text-slate-400 pt-2">
+              {EMERGENCY_GUIDES.find((g) => g.id === activeGuide)?.steps.map((s, i) => <li key={i}>{s}</li>)}
+            </ol>
+          )}
+        </CardContent>
+      </Card>
 
       {/* Request Ambulance SOS Dispatch */}
       <Card className="border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">

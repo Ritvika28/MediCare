@@ -22,6 +22,7 @@ import bloodBankRoutes from './bloodBankRoutes.js';
 import labRoutes from './labRoutes.js';
 import assessmentRoutes from './assessmentRoutes.js';
 import calculatorRoutes from './calculatorRoutes.js';
+import mlRoutes from './mlRoutes.js';
 
 const router = Router();
 
@@ -48,6 +49,7 @@ router.use('/blood-banks', bloodBankRoutes);
 router.use('/labs', labRoutes);
 router.use('/assessments', assessmentRoutes);
 router.use('/calculators', calculatorRoutes);
+router.use('/ml', mlRoutes);
 
 router.get('/health', (req, res) => res.json({ success: true, message: 'API is running' }));
 

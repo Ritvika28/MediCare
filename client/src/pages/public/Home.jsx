@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Card, CardContent } from '@/components/ui/Card';
 
 const features = [
-  { icon: Calendar, title: 'Easy Appointments', desc: 'Book, reschedule, or cancel appointments in seconds.' },
+  { icon: Calendar, title: 'Health Tracking', desc: 'Track vitals, calculators, and clinical history in one place.' },
   { icon: Shield, title: 'Secure Records', desc: 'Your medical records are encrypted and always accessible.' },
   { icon: Bot, title: 'AI Health Assistant', desc: 'Get instant answers to health questions 24/7.' },
   { icon: MapPin, title: 'Hospital Locator', desc: 'Find nearby hospitals and emergency services.' },

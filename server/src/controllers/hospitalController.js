@@ -16,12 +16,12 @@ export const getHospitals = asyncHandler(async (req, res) => {
     city: req.query.city,
     state: req.query.state,
     facilities: req.query.facilities,
-    lat: req.query.lat,
-    lng: req.query.lng,
+    lat: req.query.lat ?? req.query.latitude,
+    lng: req.query.lng ?? req.query.longitude,
     sortBy: req.query.sortBy || req.query.sort,
     page: req.query.page,
     limit: req.query.limit,
-    maxDistanceMeters: req.query.maxDistance ? parseInt(req.query.maxDistance, 10) : undefined,
+    maxDistanceMeters: req.query.maxDistance ? parseInt(req.query.maxDistance, 10) : (req.query.radius ? parseInt(req.query.radius, 10) * 1000 : undefined),
   });
 
   res.json({

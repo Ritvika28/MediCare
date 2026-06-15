@@ -5,7 +5,6 @@ import { protect, restrictTo } from '../middleware/auth.js';
 const router = Router();
 
 router.get('/', doctorController.getDoctors);
-router.get('/:id/slots', doctorController.getAvailableSlots);
 router.get('/:id', doctorController.getDoctor);
 
 router.use(protect);

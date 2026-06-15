@@ -254,7 +254,7 @@ export const searchHospitals = async ({
   if (hasCoords) {
     const maxDist = maxDistanceMeters != null ? parseFloat(maxDistanceMeters) : Infinity;
     hospitals = enrichHospitalsWithDistance(hospitals, userLat, userLng, maxDist);
-    if (sortBy === 'distance' || sortBy === 'nearby') {
+    if (sortBy === 'distance' || sortBy === 'nearby' || !sortBy || sortBy === 'rating') {
       hospitals.sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity));
     }
   }

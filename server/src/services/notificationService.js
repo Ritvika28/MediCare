@@ -1,13 +1,16 @@
 import { Notification } from '../models/Notification.js';
 
-export const createNotification = async ({ userId, type, title, message, data, link }) => {
+export const createNotification = async ({ userId, type, title, message, data, link, priority = 'medium', actionLink, metadata }) => {
   return Notification.create({
     user: userId,
     type,
     title,
     message,
     data,
-    link,
+    link: link || actionLink,
+    actionLink: actionLink || link,
+    priority,
+    metadata,
   });
 };
 
@@ -20,10 +23,11 @@ export const notifyAppointmentUpdate = async (userId, appointment, status) => {
   };
   return createNotification({
     userId,
-    type: `appointment_${status}`,
+    type: 'system',
     title: titles[status] || 'Appointment Update',
     message: `Your appointment on ${new Date(appointment.scheduledAt).toLocaleDateString()} has been ${status}.`,
     data: { appointmentId: appointment._id },
-    link: '/patient/appointments',
+    actionLink: '/patient/appointments',
+    priority: 'medium',
   });
 };
