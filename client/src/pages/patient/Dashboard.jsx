@@ -39,7 +39,6 @@ const quickActions = [
   { to: '/patient/health-calculators', icon: Calculator, label: 'Calculators Hub', color: 'amber' },
   { to: '/patient/blood-banks', icon: Droplet, label: 'Blood Banks', color: 'red' },
   { to: '/patient/nearby-labs', icon: MapPin, label: 'Nearby Labs', color: 'emerald' },
-  { to: '/patient/facility-finder', icon: Search, label: 'Facility Finder', color: 'violet' },
   { to: '/patient/emergency-hub', icon: AlertTriangle, label: 'Emergency Hub', color: 'orange' },
   { to: '/patient/ai-assistant', icon: Bot, label: 'AI Assistant', color: 'cyan' },
 ];

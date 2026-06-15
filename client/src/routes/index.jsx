@@ -35,7 +35,6 @@ import HealthCalculators from '@/pages/HealthCalculators';
 import HealthRiskAssessment from '@/pages/HealthRiskAssessment';
 import BloodBankFinder from '@/pages/BloodBankFinder';
 import NearbyLabs from '@/pages/NearbyLabs';
-import FacilityFinder from '@/pages/FacilityFinder';
 import EmergencyHub from '@/pages/EmergencyHub';
 
 import DoctorOverview from '@/pages/doctor/Overview';
@@ -92,7 +91,6 @@ export function AppRoutes() {
           <Route path="health-risk-assessment" element={<HealthRiskAssessment />} />
           <Route path="blood-banks" element={<BloodBankFinder />} />
           <Route path="nearby-labs" element={<NearbyLabs />} />
-          <Route path="facility-finder" element={<FacilityFinder />} />
           <Route path="emergency-hub" element={<EmergencyHub />} />
         </Route>
       </Route>

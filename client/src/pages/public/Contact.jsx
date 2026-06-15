@@ -16,7 +16,7 @@ export default function Contact() {
       <h1 className="text-3xl font-bold">Contact Us</h1>
       <div className="mt-8 grid gap-8 lg:grid-cols-2">
         <div className="space-y-4">
-          {[{ icon: Mail, text: 'info@medicare.com' }, { icon: Phone, text: '+1 (555) 010-0000' }, { icon: MapPin, text: '123 Health Ave, New York, NY' }].map((item) => (
+          {[{ icon: Mail, text: 'info@medicare.in' }, { icon: Phone, text: '+91-1800-103-0103' }, { icon: MapPin, text: 'MediCare Health Network, India' }].map((item) => (
             <div key={item.text} className="flex items-center gap-3 text-slate-600">
               <item.icon className="h-5 w-5 text-teal-600" />
               {item.text}

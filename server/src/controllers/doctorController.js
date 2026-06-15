@@ -63,7 +63,7 @@ export const getAvailableSlots = asyncHandler(async (req, res) => {
   const doctor = await Doctor.findById(req.params.id);
   if (!doctor) throw new AppError('Doctor not found', 404);
 
-  const slots = await calculateAvailableSlots(doctor, req.query.date);
+  const slots = await calculateAvailableSlots(doctor._id, req.query.date);
   res.json({ success: true, data: slots });
 });
 

@@ -1,5 +1,7 @@
 import { HealthAssessment } from '../models/HealthAssessment.js';
 import { Patient } from '../models/Patient.js';
+import { Doctor } from '../models/Doctor.js';
+import { Hospital } from '../models/Hospital.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
@@ -90,15 +92,59 @@ export const createAssessment = asyncHandler(async (req, res) => {
   const { riskScore, healthScore } = calculateScores(answers);
   const lifestyleAdvice = generateAdvice(answers, riskScore);
 
+  // Recommendations based on answers
+  const specializations = [];
+  const bmi = answers.weight / Math.pow(answers.height / 100, 2);
+  
+  if (answers.bloodPressure === 'stage1' || answers.bloodPressure === 'stage2' || answers.familyHistory?.includes('heart_disease') || answers.familyHistory?.includes('hypertension')) {
+    specializations.push('Cardiology');
+  }
+  if (answers.diabetes || answers.familyHistory?.includes('diabetes')) {
+    specializations.push('General Medicine');
+  }
+  if (answers.smoking === 'heavy' || answers.smoking === 'light' || answers.familyHistory?.includes('asthma')) {
+    specializations.push('General Medicine');
+  }
+  if (bmi > 30) {
+    specializations.push('General Medicine');
+  }
+  if (answers.stress === 'high') {
+    specializations.push('General Medicine');
+  }
+  
+  // Default fallback
+  specializations.push('General Medicine');
+
+  // Query doctors matching any of these specializations
+  const doctors = await Doctor.find({
+    specialization: { $in: specializations.map(s => new RegExp(s, 'i')) },
+    isActive: true
+  }).limit(4);
+
+  const recommendedDoctorIds = doctors.map(d => d._id);
+  const recommendedHospitalIds = [...new Set(doctors.map(d => d.hospital || d.hospitalId).filter(Boolean))];
+
   const assessment = await HealthAssessment.create({
     patient: patient._id,
     answers,
     riskScore,
     healthScore,
     lifestyleAdvice,
+    recommendedDoctors: recommendedDoctorIds,
+    recommendedHospitals: recommendedHospitalIds
   });
 
-  res.status(201).json({ success: true, data: assessment });
+  const populatedAssessment = await HealthAssessment.findById(assessment._id)
+    .populate({
+      path: 'recommendedDoctors',
+      populate: [
+        { path: 'user', select: 'firstName lastName avatar' },
+        { path: 'hospital', select: 'name address' }
+      ]
+    })
+    .populate('recommendedHospitals');
+
+  res.status(201).json({ success: true, data: populatedAssessment });
 });
 
 // Get assessment history for patient
@@ -107,6 +153,14 @@ export const getAssessments = asyncHandler(async (req, res) => {
   if (!patient) throw new AppError('Patient profile not found', 404);
 
   const assessments = await HealthAssessment.find({ patient: patient._id })
+    .populate({
+      path: 'recommendedDoctors',
+      populate: [
+        { path: 'user', select: 'firstName lastName avatar' },
+        { path: 'hospital', select: 'name address' }
+      ]
+    })
+    .populate('recommendedHospitals')
     .sort('-createdAt')
     .limit(parseInt(req.query.limit) || 10);
 
@@ -115,7 +169,16 @@ export const getAssessments = asyncHandler(async (req, res) => {
 
 // Get single assessment by ID
 export const getAssessment = asyncHandler(async (req, res) => {
-  const assessment = await HealthAssessment.findById(req.params.id);
+  const assessment = await HealthAssessment.findById(req.params.id)
+    .populate({
+      path: 'recommendedDoctors',
+      populate: [
+        { path: 'user', select: 'firstName lastName avatar' },
+        { path: 'hospital', select: 'name address' }
+      ]
+    })
+    .populate('recommendedHospitals');
+
   if (!assessment) throw new AppError('Assessment not found', 404);
 
   res.json({ success: true, data: assessment });

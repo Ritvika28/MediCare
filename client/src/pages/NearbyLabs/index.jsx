@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -9,24 +9,44 @@ import {
 } from 'lucide-react';
 
 export default function NearbyLabs() {
-  const [searchCity, setSearchCity] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('');
   const [useGeo, setUseGeo] = useState(false);
   const [coords, setCoords] = useState(null);
   const [expandedLab, setExpandedLab] = useState(null);
 
+  // Auto-request location on mount (Priority 6)
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+          setUseGeo(true);
+        },
+        (err) => {
+          console.warn('[Labs] Location permission not granted on mount:', err.message);
+        }
+      );
+    }
+  }, []);
+
   // Fetch laboratories
   const { data: labsRes, isLoading } = useQuery({
-    queryKey: ['labs', searchCity, selectedCategory, useGeo, coords],
+    queryKey: ['labs', searchQuery, selectedCategory, useGeo, coords],
     queryFn: () => {
+      const params = { testCategory: selectedCategory };
       if (useGeo && coords) {
-        return api.get('/labs/nearby', {
-          params: { lng: coords.lng, lat: coords.lat, testCategory: selectedCategory }
-        }).then(r => r.data);
+        params.lat = coords.lat;
+        params.lng = coords.lng;
+        params.radius = 50;
       }
-      return api.get('/labs', {
-        params: { city: searchCity, testCategory: selectedCategory }
-      }).then(r => r.data);
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
+      return api.get('/labs', { params }).then(r => r.data);
     },
   });
 
@@ -42,7 +62,7 @@ export default function NearbyLabs() {
             setUseGeo(true);
           },
           (err) => {
-            alert('Could not retrieve coordinates. Defaulting to city search.');
+            alert('Could not retrieve coordinates. Defaulting to text search.');
           }
         );
       } else {
@@ -89,11 +109,10 @@ export default function NearbyLabs() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search labs by city (e.g. Mumbai, Delhi)..."
-              value={searchCity}
-              onChange={e => setSearchCity(e.target.value)}
-              disabled={useGeo}
-              className="w-full rounded-xl border border-slate-200 dark:border-slate-850 bg-slate-50 dark:bg-slate-950 pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-cyan-500 outline-none transition disabled:opacity-50"
+              placeholder="Search labs by name, city, state, or test type..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-850 bg-slate-50 dark:bg-slate-950 pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-cyan-500 outline-none transition"
             />
           </div>
 
@@ -187,6 +206,23 @@ export default function NearbyLabs() {
                 </div>
 
                 <div className="p-4 pt-0 space-y-2">
+                  {lab.distance != null && (
+                    <div className="flex items-center justify-between text-xs">
+                      <Badge className="bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400 border-0 font-bold">
+                        📍 {lab.distance} km away
+                      </Badge>
+                      {lab.location?.coordinates && (
+                        <a
+                          href={`https://www.google.com/maps/dir/?api=1&destination=${lab.location.coordinates[1]},${lab.location.coordinates[0]}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-teal-600 dark:text-teal-400 font-bold hover:underline flex items-center gap-1"
+                        >
+                          <Compass className="h-3.5 w-3.5" /> Directions
+                        </a>
+                      )}
+                    </div>
+                  )}
                   {lab.testsAvailable?.length > 3 && (
                     <Button
                       variant="outline"

@@ -6,7 +6,8 @@ import { Button } from '@/components/ui/Button';
 import { Badge } from '@/components/ui/Badge';
 import {
   Calculator, Activity, Droplets, Scale, Flame, Heart, Baby,
-  ChevronRight, BarChart3, History, Sparkles, TrendingUp, ArrowLeft
+  ChevronRight, BarChart3, History, Sparkles, TrendingUp, ArrowLeft,
+  Calendar, HeartPulse
 } from 'lucide-react';
 
 const CALCULATORS = [
@@ -16,6 +17,10 @@ const CALCULATORS = [
   { key: 'calorie', label: 'Calorie Needs', icon: BarChart3, color: 'from-emerald-600 to-teal-500', desc: 'Daily calorie requirements based on activity level', emoji: '🥗' },
   { key: 'ideal_weight', label: 'Ideal Weight', icon: Heart, color: 'from-violet-600 to-purple-500', desc: 'Recommended weight range using Devine formula', emoji: '💪' },
   { key: 'water_intake', label: 'Water Intake', icon: Droplets, color: 'from-sky-600 to-blue-500', desc: 'Recommended daily water consumption', emoji: '💧' },
+  { key: 'period_tracker', label: 'Period Tracker', icon: Calendar, color: 'from-pink-600 to-rose-500', desc: 'Track cycles, ovulation day, and fertility window', emoji: '📅' },
+  { key: 'pregnancy_tracker', label: 'Pregnancy Tracker', icon: Baby, color: 'from-purple-600 to-indigo-500', desc: 'Calculate due date, current week, and development milestones', emoji: '👶' },
+  { key: 'heart_health', label: 'Heart Health', icon: HeartPulse, color: 'from-red-600 to-orange-500', desc: 'Check blood pressure, heart rate, and risk indicators', emoji: '❤️' },
+  { key: 'diabetes_risk', label: 'Diabetes Risk', icon: Activity, color: 'from-teal-600 to-emerald-500', desc: 'Assess type 2 diabetes risk based on key lifestyle factors', emoji: '🩸' },
 ];
 
 function BMIForm({ onSubmit, loading }) {
@@ -129,12 +134,156 @@ function WaterForm({ onSubmit, loading }) {
   );
 }
 
+function PeriodTrackerForm({ onSubmit, loading }) {
+  const [d, setD] = useState({ lastPeriodDate: '', cycleLength: 28, periodLength: 5 });
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(d); }} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <InputField label="Last Period Start Date" type="date" value={d.lastPeriodDate} onChange={v => setD(p => ({ ...p, lastPeriodDate: v }))} />
+        <InputField label="Cycle Length (Days)" value={d.cycleLength} onChange={v => setD(p => ({ ...p, cycleLength: +v }))} placeholder="28" />
+        <InputField label="Period Length (Days)" value={d.periodLength} onChange={v => setD(p => ({ ...p, periodLength: +v }))} placeholder="5" />
+      </div>
+      <SubmitBtn loading={loading} />
+    </form>
+  );
+}
+
+function PregnancyTrackerForm({ onSubmit, loading }) {
+  const [d, setD] = useState({ lastPeriodDate: '' });
+  return (
+    <form onSubmit={(e) => { e.preventDefault(); onSubmit(d); }} className="space-y-4">
+      <InputField label="Last Period Start Date" type="date" value={d.lastPeriodDate} onChange={v => setD(p => ({ ...p, lastPeriodDate: v }))} />
+      <SubmitBtn loading={loading} />
+    </form>
+  );
+}
+
+function HeartHealthForm({ onSubmit, loading }) {
+  const [d, setD] = useState({ restingHeartRate: '', systolicBP: '', diastolicBP: '', cholesterol: '', isSmoker: false, age: '', gender: 'male' });
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      onSubmit({
+        restingHeartRate: +d.restingHeartRate,
+        systolicBP: +d.systolicBP,
+        diastolicBP: +d.diastolicBP,
+        cholesterol: +d.cholesterol,
+        isSmoker: d.isSmoker,
+        age: +d.age,
+        gender: d.gender
+      });
+    }} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <InputField label="Age" value={d.age} onChange={v => setD(p => ({ ...p, age: v }))} placeholder="45" />
+        <GenderSelect value={d.gender} onChange={v => setD(p => ({ ...p, gender: v }))} />
+        <InputField label="Resting Heart Rate (BPM)" value={d.restingHeartRate} onChange={v => setD(p => ({ ...p, restingHeartRate: v }))} placeholder="72" />
+        <InputField label="Cholesterol (mg/dL)" value={d.cholesterol} onChange={v => setD(p => ({ ...p, cholesterol: v }))} placeholder="190" />
+        <InputField label="Systolic BP (mmHg)" value={d.systolicBP} onChange={v => setD(p => ({ ...p, systolicBP: v }))} placeholder="120" />
+        <InputField label="Diastolic BP (mmHg)" value={d.diastolicBP} onChange={v => setD(p => ({ ...p, diastolicBP: v }))} placeholder="80" />
+      </div>
+      <div>
+        <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Smoking Status</label>
+        <div className="flex gap-2">
+          {[{ val: false, label: '🚭 Non-Smoker' }, { val: true, label: '🚬 Smoker' }].map(opt => (
+            <button key={String(opt.val)} type="button" onClick={() => setD(p => ({ ...p, isSmoker: opt.val }))}
+              className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-bold border transition ${d.isSmoker === opt.val ? 'bg-red-600 text-white border-red-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-red-300'}`}>
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      </div>
+      <SubmitBtn loading={loading} />
+    </form>
+  );
+}
+
+function DiabetesRiskForm({ onSubmit, loading }) {
+  const [d, setD] = useState({ age: '', weight: '', height: '', familyHistory: false, activityLevel: 'moderate', smoking: 'never', bloodPressure: 'normal' });
+  const bmiVal = d.weight && d.height ? (+d.weight / Math.pow(+d.height / 100, 2)).toFixed(1) : null;
+
+  return (
+    <form onSubmit={(e) => {
+      e.preventDefault();
+      const bmi = bmiVal ? parseFloat(bmiVal) : 22.0;
+      onSubmit({
+        age: +d.age,
+        bmi,
+        familyHistory: d.familyHistory,
+        activityLevel: d.activityLevel,
+        smoking: d.smoking,
+        bloodPressure: d.bloodPressure
+      });
+    }} className="space-y-4">
+      <div className="grid gap-4 sm:grid-cols-3">
+        <InputField label="Age" value={d.age} onChange={v => setD(p => ({ ...p, age: v }))} placeholder="45" />
+        <InputField label="Weight (kg)" value={d.weight} onChange={v => setD(p => ({ ...p, weight: v }))} placeholder="70" />
+        <InputField label="Height (cm)" value={d.height} onChange={v => setD(p => ({ ...p, height: v }))} placeholder="175" />
+      </div>
+      {bmiVal && (
+        <div className="text-xs font-bold text-teal-600 dark:text-teal-400">
+          Calculated BMI: {bmiVal}
+        </div>
+      )}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <div>
+          <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Family History of Diabetes</label>
+          <div className="flex gap-2">
+            {[{ val: false, label: '🚫 No History' }, { val: true, label: '🩸 Family History' }].map(opt => (
+              <button key={String(opt.val)} type="button" onClick={() => setD(p => ({ ...p, familyHistory: opt.val }))}
+                className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-bold border transition ${d.familyHistory === opt.val ? 'bg-teal-600 text-white border-teal-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-teal-300'}`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Blood Pressure</label>
+          <div className="flex gap-2">
+            {[{ val: 'normal', label: '✅ Normal' }, { val: 'high', label: '🫀 High BP' }].map(opt => (
+              <button key={opt.val} type="button" onClick={() => setD(p => ({ ...p, bloodPressure: opt.val }))}
+                className={`flex-1 px-4 py-2.5 rounded-xl text-xs font-bold border transition ${d.bloodPressure === opt.val ? 'bg-teal-600 text-white border-teal-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-teal-300'}`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Activity Level</label>
+          <div className="flex gap-2">
+            {[{ val: 'sedentary', label: 'Sedentary' }, { val: 'moderate', label: 'Moderate' }, { val: 'active', label: 'Active' }].map(opt => (
+              <button key={opt.val} type="button" onClick={() => setD(p => ({ ...p, activityLevel: opt.val }))}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border transition ${d.activityLevel === opt.val ? 'bg-teal-600 text-white border-teal-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-teal-300'}`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">Smoking Status</label>
+          <div className="flex gap-2">
+            {[{ val: 'never', label: 'Never' }, { val: 'former', label: 'Former' }, { val: 'current', label: 'Current' }].map(opt => (
+              <button key={opt.val} type="button" onClick={() => setD(p => ({ ...p, smoking: opt.val }))}
+                className={`flex-1 px-3 py-2 rounded-xl text-xs font-bold border transition ${d.smoking === opt.val ? 'bg-teal-600 text-white border-teal-600' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-400 hover:border-teal-300'}`}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+      <SubmitBtn loading={loading} />
+    </form>
+  );
+}
+
 // Shared UI helpers
-function InputField({ label, value, onChange, placeholder }) {
+function InputField({ label, type = 'number', value, onChange, placeholder }) {
   return (
     <div>
       <label className="block text-xs font-bold text-slate-600 dark:text-slate-400 mb-1.5">{label}</label>
-      <input type="number" required value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
+      <input type={type} required value={value} onChange={e => onChange(e.target.value)} placeholder={placeholder}
         className="w-full rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 text-sm focus:ring-2 focus:ring-teal-500 outline-none transition" />
     </div>
   );
@@ -172,23 +321,46 @@ function ResultDisplay({ result, type }) {
   const summary = result.resultSummary || result.data?.resultSummary;
   if (!outputs) return null;
 
+  const listKeys = ['advice', 'dietAdvice'];
+  const arrays = {};
+  listKeys.forEach(k => {
+    if (Array.isArray(outputs[k])) {
+      arrays[k] = outputs[k];
+    }
+  });
+
   return (
-    <div className="mt-6 p-5 rounded-2xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/30 border border-teal-200 dark:border-teal-900 space-y-3">
+    <div className="mt-6 p-5 rounded-2xl bg-gradient-to-br from-teal-50 to-emerald-50 dark:from-teal-950/30 dark:to-emerald-950/30 border border-teal-200 dark:border-teal-900 space-y-4">
       <div className="flex items-center gap-2">
         <Sparkles className="h-5 w-5 text-teal-600" />
         <h3 className="font-bold text-teal-800 dark:text-teal-300">Results</h3>
       </div>
       <p className="text-lg font-black text-teal-900 dark:text-teal-200">{summary}</p>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {Object.entries(outputs).filter(([k]) => k !== 'unit' && k !== 'range').map(([key, value]) => (
-          <div key={key} className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-teal-100 dark:border-slate-800">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
-            <p className="text-base font-black text-slate-900 dark:text-white mt-1">
-              {typeof value === 'object' ? JSON.stringify(value) : value}
-            </p>
-          </div>
-        ))}
+        {Object.entries(outputs)
+          .filter(([k]) => k !== 'unit' && k !== 'range' && !listKeys.includes(k))
+          .map(([key, value]) => (
+            <div key={key} className="bg-white dark:bg-slate-900 rounded-xl p-3 border border-teal-100 dark:border-slate-800">
+              <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+              <p className="text-base font-black text-slate-900 dark:text-white mt-1 capitalize">
+                {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+              </p>
+            </div>
+          ))}
       </div>
+
+      {Object.entries(arrays).map(([key, list]) => (
+        <div key={key} className="pt-3 border-t border-teal-200 dark:border-teal-950/30 space-y-2">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider capitalize">{key.replace(/([A-Z])/g, ' $1').trim()}</p>
+          <ul className="space-y-1.5">
+            {list.map((item, i) => (
+              <li key={i} className="flex gap-2 text-xs font-semibold text-slate-700 dark:text-slate-350 leading-relaxed">
+                <span className="text-teal-650 dark:text-teal-400">✓</span> {item}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
     </div>
   );
 }
@@ -219,6 +391,10 @@ export default function HealthCalculators() {
     calorie: <CalorieForm onSubmit={handleCalc} loading={calcMutation.isPending} />,
     ideal_weight: <IdealWeightForm onSubmit={handleCalc} loading={calcMutation.isPending} />,
     water_intake: <WaterForm onSubmit={handleCalc} loading={calcMutation.isPending} />,
+    period_tracker: <PeriodTrackerForm onSubmit={handleCalc} loading={calcMutation.isPending} />,
+    pregnancy_tracker: <PregnancyTrackerForm onSubmit={handleCalc} loading={calcMutation.isPending} />,
+    heart_health: <HeartHealthForm onSubmit={handleCalc} loading={calcMutation.isPending} />,
+    diabetes_risk: <DiabetesRiskForm onSubmit={handleCalc} loading={calcMutation.isPending} />,
   };
 
   const activeCalc = CALCULATORS.find(c => c.key === active);
@@ -237,7 +413,7 @@ export default function HealthCalculators() {
           </div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight">Health Calculators</h1>
           <p className="text-emerald-100/90 text-sm md:text-base leading-relaxed">
-            Calculate BMI, BMR, body fat, daily calorie needs, ideal weight, and recommended water intake with medical-grade formulas.
+            Calculate BMI, BMR, body fat, calorie needs, ideal weight, period cycles, pregnancy milestones, heart score, and diabetes risks.
           </p>
         </div>
       </div>

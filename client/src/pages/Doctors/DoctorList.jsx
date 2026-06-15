@@ -103,7 +103,7 @@ export default function DoctorList() {
             <div className="relative">
               <input
                 type="text"
-                placeholder="City (e.g. New York, Lucknow)..."
+                placeholder="City (e.g. Mumbai, Delhi, Lucknow)..."
                 value={filters.city}
                 onChange={(e) => handleFilterChange('city', e.target.value)}
                 className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 focus:ring-2 focus:ring-teal-500 text-slate-850 dark:text-slate-100 shadow-inner outline-none transition"

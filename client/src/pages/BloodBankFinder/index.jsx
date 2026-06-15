@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/api/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -10,7 +10,7 @@ import {
 
 export default function BloodBankFinder() {
   const queryClient = useQueryClient();
-  const [searchCity, setSearchCity] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedGroup, setSelectedGroup] = useState('');
   const [useGeo, setUseGeo] = useState(false);
   const [coords, setCoords] = useState(null);
@@ -18,18 +18,38 @@ export default function BloodBankFinder() {
   const [formData, setFormData] = useState({ name: '', bloodGroup: 'O+', phone: '', email: '' });
   const [successMsg, setSuccessMsg] = useState('');
 
+  // Auto-request location on mount (Priority 6)
+  useEffect(() => {
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          setCoords({
+            lat: position.coords.latitude,
+            lng: position.coords.longitude
+          });
+          setUseGeo(true);
+        },
+        (err) => {
+          console.warn('[BloodBank] Location permission not granted on mount:', err.message);
+        }
+      );
+    }
+  }, []);
+
   // Fetch blood banks with query filters
   const { data: banksRes, isLoading, refetch } = useQuery({
-    queryKey: ['blood-banks', searchCity, selectedGroup, useGeo, coords],
+    queryKey: ['blood-banks', searchQuery, selectedGroup, useGeo, coords],
     queryFn: () => {
+      const params = { bloodGroup: selectedGroup };
       if (useGeo && coords) {
-        return api.get('/blood-banks/nearby', {
-          params: { lng: coords.lng, lat: coords.lat, bloodGroup: selectedGroup }
-        }).then(r => r.data);
+        params.lat = coords.lat;
+        params.lng = coords.lng;
+        params.radius = 50;
       }
-      return api.get('/blood-banks', {
-        params: { city: searchCity, bloodGroup: selectedGroup }
-      }).then(r => r.data);
+      if (searchQuery.trim()) {
+        params.search = searchQuery.trim();
+      }
+      return api.get('/blood-banks', { params }).then(r => r.data);
     },
   });
 
@@ -106,11 +126,10 @@ export default function BloodBankFinder() {
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
             <input
               type="text"
-              placeholder="Search by city (e.g. Mumbai, Delhi)..."
-              value={searchCity}
-              onChange={e => setSearchCity(e.target.value)}
-              disabled={useGeo}
-              className="w-full rounded-xl border border-slate-200 dark:border-slate-850 bg-slate-50 dark:bg-slate-950 pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500 outline-none transition disabled:opacity-50"
+              placeholder="Search blood banks by name, city, state, or hospital..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+              className="w-full rounded-xl border border-slate-200 dark:border-slate-850 bg-slate-50 dark:bg-slate-950 pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-red-500 outline-none transition"
             />
           </div>
 
@@ -211,7 +230,24 @@ export default function BloodBankFinder() {
                 </CardContent>
               </div>
 
-              <div className="p-4 pt-0 flex gap-2">
+              <div className="p-4 pt-0 space-y-2">
+                {bank.distance != null && (
+                  <div className="flex items-center justify-between text-xs">
+                    <Badge className="bg-blue-50 text-blue-600 dark:bg-blue-950/20 dark:text-blue-400 border-0 font-bold">
+                      📍 {bank.distance} km away
+                    </Badge>
+                    {bank.location?.coordinates && (
+                      <a
+                        href={`https://www.google.com/maps/dir/?api=1&destination=${bank.location.coordinates[1]},${bank.location.coordinates[0]}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-teal-600 dark:text-teal-400 font-bold hover:underline flex items-center gap-1"
+                      >
+                        <Compass className="h-3.5 w-3.5" /> Get Directions
+                      </a>
+                    )}
+                  </div>
+                )}
                 <Button
                   onClick={() => setRegisteringBank(bank)}
                   className="w-full bg-red-650 hover:bg-red-700 text-white rounded-xl text-xs font-bold gap-1.5"

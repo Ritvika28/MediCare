@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Calendar, FileText, Pill, Bell, User, Users, Stethoscope,
   Building2, BarChart3, Settings, MessageSquare, Bot, Menu, LogOut, Moon, Sun, Activity,
-  AlertTriangle, Video, Clock, Calculator, HeartPulse, Droplet, MapPin, Search
+  AlertTriangle, Video, Clock, Calculator, HeartPulse, Droplet, MapPin,
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
@@ -26,7 +26,6 @@ const navByRole = {
     { to: '/patient/health-risk-assessment', icon: HeartPulse, label: 'Health Risk Assessment' },
     { to: '/patient/blood-banks', icon: Droplet, label: 'Blood Bank Finder' },
     { to: '/patient/nearby-labs', icon: MapPin, label: 'Nearby Labs' },
-    { to: '/patient/facility-finder', icon: Search, label: 'Facility Finder' },
     { to: '/patient/emergency-hub', icon: AlertTriangle, label: 'Emergency Hub' },
     { to: '/patient/ai-assistant', icon: Bot, label: 'AI Health Assistant' },
     { to: '/patient/profile', icon: User, label: 'Profile' },

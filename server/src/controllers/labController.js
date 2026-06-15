@@ -2,38 +2,142 @@ import { Lab } from '../models/Lab.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 
-// Get all labs with optional filters
-export const getLabs = asyncHandler(async (req, res) => {
+function haversineDistance(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+const INDIAN_CITIES = ['Mumbai', 'Delhi', 'Lucknow', 'Pune', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Ahmedabad', 'Jaipur', 'Bhopal', 'Indore'];
+
+const TEST_KEYWORDS = {
+  mri: { name: 'MRI', category: 'mri' },
+  ct: { name: 'CT', category: 'ct_scan' },
+  cbc: { name: 'CBC', category: 'blood_test' },
+  blood: { name: 'Blood', category: 'blood_test' },
+  diabetes: { name: 'Diabetes', category: 'blood_test' },
+  hba1c: { name: 'HbA1c', category: 'blood_test' },
+  lipid: { name: 'Lipid', category: 'blood_test' },
+  ultrasound: { name: 'Ultrasound', category: 'ultrasound' },
+  'x-ray': { name: 'X-Ray', category: 'x_ray' },
+  xray: { name: 'X-Ray', category: 'x_ray' },
+};
+
+function buildLabSearchFilter(query) {
+  const { search, city, state, name, test, testCategory } = query;
   const filter = {};
-  if (req.query.city) filter['address.city'] = new RegExp(req.query.city, 'i');
-  if (req.query.testCategory) filter['testsAvailable.category'] = req.query.testCategory;
+  const orConditions = [];
 
-  const labs = await Lab.find(filter).sort('-rating').limit(parseInt(req.query.limit) || 50);
+  if (search?.trim()) {
+    const raw = search.trim();
+    const rx = new RegExp(raw, 'i');
 
-  res.json({ success: true, count: labs.length, data: labs });
+    for (const c of INDIAN_CITIES) {
+      if (raw.toLowerCase().includes(c.toLowerCase())) {
+        orConditions.push({ 'address.city': new RegExp(`^${c}$`, 'i') });
+      }
+    }
+
+    for (const [key, val] of Object.entries(TEST_KEYWORDS)) {
+      if (raw.toLowerCase().includes(key)) {
+        orConditions.push({ 'testsAvailable.name': new RegExp(val.name, 'i') });
+        orConditions.push({ 'testsAvailable.category': val.category });
+      }
+    }
+
+    orConditions.push(
+      { name: rx },
+      { 'address.city': rx },
+      { 'address.state': rx },
+      { 'address.street': rx },
+      { 'testsAvailable.name': rx },
+      { 'testsAvailable.category': rx }
+    );
+  } else {
+    if (city) filter['address.city'] = new RegExp(city.trim(), 'i');
+    if (state) filter['address.state'] = new RegExp(state.trim(), 'i');
+    if (name) filter.name = new RegExp(name.trim(), 'i');
+  }
+
+  if (testCategory) filter['testsAvailable.category'] = testCategory;
+  if (test) filter['testsAvailable.name'] = new RegExp(test.trim(), 'i');
+
+  if (orConditions.length > 0) filter.$or = orConditions;
+
+  return filter;
+}
+
+export const getLabs = asyncHandler(async (req, res) => {
+  const { lat, lng, radius = 50, maxPrice, minRating, openNow, page = 1, limit = 20 } = req.query;
+
+  const filter = buildLabSearchFilter(req.query);
+  const labs = await Lab.find(filter);
+
+  const userLat = parseFloat(lat);
+  const userLng = parseFloat(lng);
+  const hasCoords = !Number.isNaN(userLat) && !Number.isNaN(userLng);
+  const radiusKm = parseFloat(radius) || 50;
+
+  let enriched = labs.map((l) => {
+    const obj = l.toObject ? l.toObject() : { ...l };
+    if (l.location?.coordinates?.length === 2 && hasCoords) {
+      obj.distance = parseFloat(haversineDistance(userLat, userLng, l.location.coordinates[1], l.location.coordinates[0]).toFixed(1));
+    } else {
+      obj.distance = null;
+    }
+    return obj;
+  });
+
+  if (hasCoords) {
+    enriched = enriched.filter((l) => l.distance !== null && l.distance <= radiusKm);
+  }
+
+  if (minRating) {
+    const rate = parseFloat(minRating);
+    enriched = enriched.filter((l) => l.rating >= rate);
+  }
+
+  if (openNow === 'true') {
+    enriched = enriched.filter((l) => l.isOpenNow);
+  }
+
+  if (maxPrice) {
+    const price = parseFloat(maxPrice);
+    enriched = enriched.filter((l) => l.testsAvailable?.some((t) => t.price <= price));
+  }
+
+  if (hasCoords) {
+    enriched.sort((a, b) => {
+      if (a.distance === null) return 1;
+      if (b.distance === null) return -1;
+      return a.distance - b.distance;
+    });
+  } else {
+    enriched.sort((a, b) => b.rating - a.rating);
+  }
+
+  const total = enriched.length;
+  const p = parseInt(page, 10) || 1;
+  const l = parseInt(limit, 10) || 20;
+  const start = (p - 1) * l;
+  const paginatedData = enriched.slice(start, start + l);
+
+  res.json({
+    success: true,
+    count: paginatedData.length,
+    data: paginatedData,
+    pagination: { page: p, limit: l, total, totalPages: Math.ceil(total / l) || 1 },
+  });
 });
 
-// Get nearby labs
 export const getNearbyLabs = asyncHandler(async (req, res) => {
-  const { lng, lat, maxDistance = 15000 } = req.query;
-  if (!lng || !lat) throw new AppError('Longitude and latitude are required', 400);
-
-  const labs = await Lab.find({
-    location: {
-      $near: {
-        $geometry: { type: 'Point', coordinates: [parseFloat(lng), parseFloat(lat)] },
-        $maxDistance: parseInt(maxDistance),
-      },
-    },
-  }).limit(20);
-
-  res.json({ success: true, count: labs.length, data: labs });
+  return getLabs(req, res);
 });
 
-// Get single lab by ID
 export const getLab = asyncHandler(async (req, res) => {
   const lab = await Lab.findById(req.params.id);
   if (!lab) throw new AppError('Lab not found', 404);
-
   res.json({ success: true, data: lab });
 });

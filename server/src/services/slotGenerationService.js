@@ -9,17 +9,37 @@ export const calculateAvailableSlots = async (doctorId, dateString) => {
   const doctor = await Doctor.findById(doctorId);
   if (!doctor) return [];
 
-  // Fetch all schedules for this doctor on this day of the week
-  const daySchedules = await Schedule.find({
+  let daySchedules = await Schedule.find({
     doctorId,
     dayOfWeek,
     isActive: true,
   });
 
-  // Check if date is blocked on the doctor level
+  // Fallback to embedded doctor.schedule if no Schedule collection entries
+  if (!daySchedules.length && doctor.schedule?.length) {
+    daySchedules = doctor.schedule
+      .filter((s) => s.dayOfWeek === dayOfWeek)
+      .map((s) => ({
+        startTime: s.startTime,
+        endTime: s.endTime,
+        slotDuration: s.slotDuration || doctor.averageConsultationTime || 30,
+        blockedDates: [],
+      }));
+  }
+
   const isDoctorBlocked = doctor.blockedDates?.some(
     (b) => new Date(b.date).toDateString() === date.toDateString()
   );
+
+  // Default Mon–Sat 09:00–17:00 for doctors without explicit schedule
+  if (!daySchedules.length && dayOfWeek >= 1 && dayOfWeek <= 6) {
+    daySchedules = [{
+      startTime: '09:00',
+      endTime: '17:00',
+      slotDuration: doctor.averageConsultationTime || 30,
+      blockedDates: [],
+    }];
+  }
 
   if (isDoctorBlocked || !daySchedules.length) {
     return [];

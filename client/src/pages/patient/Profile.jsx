@@ -3,7 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { api } from '@/api/axios';
 import { useAuth } from '@/context/AuthContext';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Input } from '@/components/ui/Input';
 import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
@@ -11,48 +11,68 @@ import { Badge } from '@/components/ui/Badge';
 import { Skeleton } from '@/components/ui/Skeleton';
 import { 
   Calendar, FileText, Pill, Activity, User, Phone, Droplet, 
-  Sparkles, CheckCircle2, ChevronRight, Stethoscope, FileHeart
+  Sparkles, CheckCircle2, ChevronRight, Stethoscope, FileHeart, Award, HeartPulse, Heart
 } from 'lucide-react';
 
 export default function PatientProfile() {
   const { user, profile, fetchUser } = useAuth();
   const { toast } = useToast();
 
-  const { register, handleSubmit } = useForm({
+  const { register, handleSubmit, watch } = useForm({
     defaultValues: {
-      firstName: user?.firstName,
-      lastName: user?.lastName,
-      phone: user?.phone,
-      bloodGroup: profile?.bloodGroup,
-      gender: profile?.gender,
+      firstName: user?.firstName || '',
+      lastName: user?.lastName || '',
+      phone: user?.phone || '',
+      bloodGroup: profile?.bloodGroup || '',
+      gender: profile?.gender || '',
     },
   });
+
+  const watchedValues = watch();
+
+  // Calculate profile completion percentage
+  const calculateCompletion = () => {
+    const fields = [
+      watchedValues.firstName,
+      watchedValues.lastName,
+      watchedValues.phone,
+      watchedValues.bloodGroup,
+      watchedValues.gender
+    ];
+    const filled = fields.filter(val => !!val?.trim?.() || !!val).length;
+    return Math.round((filled / fields.length) * 100);
+  };
+
+  const completionPercent = calculateCompletion();
 
   const updateMutation = useMutation({
     mutationFn: (data) => api.patch('/patients/profile/me', data),
     onSuccess: () => {
       fetchUser();
-      toast('Profile updated successfully', 'success');
+      toast('Health passport updated successfully', 'success');
     },
   });
 
-  // Query Appointments for Timeline
-  const { data: appointments = [], isLoading: appointmentsLoading } = useQuery({
+  // Query Appointments for Timeline & Stats
+  const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
     queryKey: ['profile-appointments'],
     queryFn: () => api.get('/appointments').then((r) => r.data.data || []),
   });
+  const appointments = appointmentsData || [];
 
-  // Query Prescriptions for Timeline
-  const { data: prescriptions = [], isLoading: prescriptionsLoading } = useQuery({
+  // Query Prescriptions for Timeline & Stats
+  const { data: prescriptionsData, isLoading: prescriptionsLoading } = useQuery({
     queryKey: ['profile-prescriptions'],
     queryFn: () => api.get('/prescriptions').then((r) => r.data.data || []),
   });
+  const prescriptions = prescriptionsData || [];
 
-  // Query Medical Records for Timeline
-  const { data: records = [], isLoading: recordsLoading } = useQuery({
+  // Query Medical Records for Timeline & Stats
+  const { data: recordsData, isLoading: recordsLoading } = useQuery({
     queryKey: ['profile-records'],
     queryFn: () => api.get('/records').then((r) => r.data.data || []),
   });
+  const records = recordsData || [];
 
   // Merge & Sort all entries chronologically (newest first)
   const [timeline, setTimeline] = useState([]);
@@ -66,11 +86,11 @@ export default function PatientProfile() {
         date: new Date(apt.scheduledAt || apt.appointmentDate),
         type: 'appointment',
         title: `Appointment with Dr. ${apt.doctor?.user?.firstName || ''} ${apt.doctor?.user?.lastName || ''}`,
-        subtitle: `${apt.doctor?.specialization || 'General Practitioner'} · ${apt.hospital?.name || 'MediCare Partner'}`,
+        subtitle: `${apt.doctor?.specialization || 'General Practitioner'} · ${apt.hospital?.name || 'Medicare Center'}`,
         badge: apt.status,
         badgeVariant: apt.status === 'confirmed' || apt.status === 'completed' ? 'success' : 'secondary',
         icon: Calendar,
-        colorClass: 'bg-teal-500/10 text-teal-600 dark:bg-teal-950/40',
+        colorClass: 'bg-teal-500/10 text-teal-605 dark:bg-teal-950/40',
       });
     });
 
@@ -80,7 +100,7 @@ export default function PatientProfile() {
         date: new Date(pres.createdAt || pres.date),
         type: 'prescription',
         title: `Prescription issued by Dr. ${pres.doctor?.user?.firstName || ''} ${pres.doctor?.user?.lastName || ''}`,
-        subtitle: `Medicines listed: ${pres.medicines?.map(m => m.name).join(', ') || 'General therapy'}`,
+        subtitle: `Medicines: ${pres.medicines?.map(m => m.name).join(', ') || 'General therapy'}`,
         badge: 'Prescribed',
         badgeVariant: 'success',
         icon: Pill,
@@ -104,59 +124,111 @@ export default function PatientProfile() {
 
     list.sort((a, b) => b.date.getTime() - a.date.getTime());
     setTimeline(list);
-  }, [appointments, prescriptions, records]);
+  }, [appointmentsData, prescriptionsData, recordsData]);
 
   const timelineLoading = appointmentsLoading || prescriptionsLoading || recordsLoading;
 
   return (
     <div className="space-y-6">
-      {/* Title */}
-      <div>
-        <h1 className="text-3xl font-extrabold tracking-tight text-slate-900 dark:text-white flex items-center gap-2">
-          Profile Settings & Timeline <Sparkles className="h-5 w-5 text-teal-500 fill-teal-500" />
-        </h1>
-        <p className="text-slate-500 text-sm mt-1">
-          Manage personal data and browse your consolidated chronological health timeline
-        </p>
+      {/* Banner / Title */}
+      <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 via-indigo-950 to-slate-900 p-6 md:p-8 text-white overflow-hidden shadow-xl border border-slate-800">
+        <div className="absolute right-0 top-0 translate-x-16 -translate-y-16 opacity-10">
+          <Award className="h-80 w-80 text-teal-400" />
+        </div>
+        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-3">
+            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-500/10 text-teal-400 text-xs font-bold uppercase tracking-wider border border-teal-500/25">
+              <Sparkles className="h-3.5 w-3.5" /> Premium Health Passport
+            </div>
+            <h1 className="text-3xl font-black tracking-tight">
+              Dr. {user?.firstName}'s Health Desk
+            </h1>
+            <p className="text-slate-405 text-sm max-w-xl">
+              Consolidated medical record counts, personal health cards, and chronological clinical history tracking.
+            </p>
+          </div>
+
+          {/* Profile Completion Meter */}
+          <div className="flex items-center gap-4 bg-slate-850/50 p-4 rounded-2xl border border-slate-800 shrink-0 backdrop-blur-sm">
+            <div className="relative h-14 w-14 flex items-center justify-center">
+              <svg className="w-full h-full transform -rotate-90">
+                <circle cx="28" cy="28" r="24" fill="none" stroke="#1e293b" strokeWidth="4" />
+                <circle cx="28" cy="28" r="24" fill="none" stroke="#0d9488" strokeWidth="4"
+                  strokeDasharray={2 * Math.PI * 24}
+                  strokeDashoffset={2 * Math.PI * 24 * (1 - completionPercent / 100)}
+                  strokeLinecap="round"
+                />
+              </svg>
+              <span className="absolute text-xs font-black text-teal-400">{completionPercent}%</span>
+            </div>
+            <div>
+              <p className="text-xs font-black text-slate-300">Passport Status</p>
+              <p className="text-[10px] text-slate-450 mt-0.5">{completionPercent === 100 ? 'Fully Complete' : 'Incomplete details'}</p>
+            </div>
+          </div>
+        </div>
       </div>
 
+      {/* Stats Counter Bar */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        {[
+          { label: 'Consultations booked', count: appointments.length, icon: Calendar, color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/20' },
+          { label: 'Active prescriptions', count: prescriptions.length, icon: Pill, color: 'text-indigo-650 bg-indigo-50 dark:bg-indigo-950/20' },
+          { label: 'Uploaded Health Files', count: records.length, icon: FileText, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20' },
+        ].map((stat) => (
+          <Card key={stat.label} className="border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm">
+            <CardContent className="p-4 flex items-center gap-4">
+              <div className={`p-3 rounded-xl shrink-0 ${stat.color}`}>
+                <stat.icon className="h-6 w-6" />
+              </div>
+              <div>
+                <p className="text-2xl font-black text-slate-850 dark:text-white">{stat.count}</p>
+                <p className="text-xs font-bold text-slate-400 uppercase tracking-wider mt-0.5">{stat.label}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Bottom Main Content Panel */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Left Side: Personal Information Form */}
+        {/* Left Side: Personal Info Passport Form */}
         <div className="lg:col-span-1 space-y-6">
-          <Card className="border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <Card className="border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
             <CardHeader className="pb-3 border-b dark:border-slate-800/80">
-              <CardTitle className="text-base flex items-center gap-2">
-                <User className="h-5 w-5 text-teal-600" /> Personal Information
+              <CardTitle className="text-base flex items-center gap-2 text-slate-850 dark:text-white font-black">
+                <User className="h-5 w-5 text-teal-605" /> Passport Settings
               </CardTitle>
+              <CardDescription>Keep your clinical variables up to date</CardDescription>
             </CardHeader>
             <CardContent className="pt-4">
               <form onSubmit={handleSubmit((d) => updateMutation.mutate(d))} className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">First Name</label>
-                    <Input {...register('firstName')} placeholder="First Name" className="text-xs" />
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider block">First Name</label>
+                    <Input {...register('firstName')} placeholder="First Name" className="text-xs rounded-xl" />
                   </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">Last Name</label>
-                    <Input {...register('lastName')} placeholder="Last Name" className="text-xs" />
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider block">Last Name</label>
+                    <Input {...register('lastName')} placeholder="Last Name" className="text-xs rounded-xl" />
                   </div>
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">Phone number</label>
-                  <Input {...register('phone')} placeholder="Phone" className="text-xs" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider block">Phone Number</label>
+                  <Input {...register('phone')} placeholder="Phone" className="text-xs rounded-xl" />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">Blood group</label>
-                  <Input {...register('bloodGroup')} placeholder="e.g. O+" className="text-xs" />
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider block">Blood Group</label>
+                  <Input {...register('bloodGroup')} placeholder="e.g. O+" className="text-xs rounded-xl" />
                 </div>
 
-                <div className="space-y-1">
-                  <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider">Gender</label>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-450 dark:text-slate-500 uppercase tracking-wider block">Gender</label>
                   <select 
                     {...register('gender')} 
-                    className="flex h-10 w-full rounded-lg border border-slate-200 px-3 text-xs dark:border-slate-700 dark:bg-slate-900 text-slate-800 dark:text-slate-100"
+                    className="flex h-10 w-full rounded-xl border border-slate-200 px-3 text-xs dark:border-slate-800 dark:bg-slate-950 text-slate-800 dark:text-slate-250 focus:ring-2 focus:ring-teal-600 outline-none"
                   >
                     <option value="">Select gender</option>
                     <option value="male">Male</option>
@@ -168,21 +240,21 @@ export default function PatientProfile() {
                 <Button 
                   type="submit" 
                   disabled={updateMutation.isPending}
-                  className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-2 shadow"
+                  className="w-full bg-teal-650 hover:bg-teal-700 text-white font-bold text-xs py-2.5 rounded-xl shadow"
                 >
-                  Save Profile Changes
+                  {updateMutation.isPending ? 'Updating...' : 'Save Profile Changes'}
                 </Button>
               </form>
             </CardContent>
           </Card>
         </div>
 
-        {/* Right Side: Chronological Health Timeline */}
+        {/* Right Side: Consolidated Health Timeline */}
         <div className="lg:col-span-2 space-y-6">
-          <Card className="border border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
+          <Card className="border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
             <CardHeader className="pb-3 border-b dark:border-slate-800/80">
-              <CardTitle className="text-base flex items-center gap-2">
-                <FileHeart className="h-5 w-5 text-teal-600" /> Medical & Health Timeline
+              <CardTitle className="text-base flex items-center gap-2 text-slate-850 dark:text-white font-black">
+                <FileHeart className="h-5 w-5 text-teal-605" /> Consolidated Health Timeline
               </CardTitle>
             </CardHeader>
             <CardContent className="pt-4">
@@ -193,25 +265,25 @@ export default function PatientProfile() {
                   ))}
                 </div>
               ) : timeline.length === 0 ? (
-                <div className="text-center py-12 text-slate-500 border border-dashed dark:border-slate-800 rounded-xl">
-                  <Activity className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                  <p className="font-bold text-slate-850 dark:text-slate-200">No medical timeline entries found</p>
-                  <p className="text-xs text-slate-400 mt-1">Book consultations, receive prescriptions to build history.</p>
+                <div className="text-center py-12 text-slate-500 border border-dashed dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/10">
+                  <Activity className="h-10 w-10 text-slate-400 mx-auto mb-2 animate-pulse" />
+                  <p className="font-extrabold text-slate-850 dark:text-slate-200">No medical timeline entries found</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Book consultations or record diagnostic scans to build clinical history.</p>
                 </div>
               ) : (
-                <div className="relative border-l-2 border-slate-200 dark:border-slate-850 ml-4 pl-6 space-y-6">
-                  {timeline.map((item) => (
+                <div className="relative border-l-2 border-slate-100 dark:border-slate-800/60 ml-4 pl-6 space-y-6">
+                  {timeline.slice(0, 15).map((item) => (
                     <div key={item.id} className="relative group">
                       {/* Timeline Dot Indicator */}
-                      <span className={`absolute -left-[37px] top-1.5 flex h-6 w-6 items-center justify-center rounded-full border-2 border-white dark:border-slate-950 ${item.colorClass} shadow-sm transition transform group-hover:scale-110 duration-200`}>
+                      <span className={`absolute -left-[37px] top-1.5 flex h-6.5 w-6.5 items-center justify-center rounded-full border-2 border-white dark:border-slate-900 ${item.colorClass} shadow-sm transition transform group-hover:scale-110 duration-200`}>
                         <item.icon className="h-3.5 w-3.5" />
                       </span>
 
                       {/* Timeline Card */}
-                      <div className="p-3.5 rounded-xl border border-slate-100 dark:border-slate-850 bg-white dark:bg-slate-900/60 shadow-sm transition hover:border-teal-500/30 flex flex-wrap justify-between items-start gap-4">
+                      <div className="p-4 rounded-xl border border-slate-100 dark:border-slate-800/60 bg-white dark:bg-slate-900/40 shadow-sm transition hover:border-teal-500/30 flex flex-wrap justify-between items-start gap-4">
                         <div className="space-y-1 flex-1">
                           <p className="text-xs font-semibold text-slate-400">
-                            {item.date.toLocaleDateString('en-US', {
+                            {item.date.toLocaleDateString('en-IN', {
                               year: 'numeric',
                               month: 'short',
                               day: 'numeric',
@@ -219,10 +291,10 @@ export default function PatientProfile() {
                               minute: '2-digit',
                             })}
                           </p>
-                          <h4 className="font-bold text-sm text-slate-850 dark:text-slate-100">{item.title}</h4>
-                          <p className="text-xs text-slate-500 leading-relaxed font-medium">{item.subtitle}</p>
+                          <h4 className="font-black text-sm text-slate-800 dark:text-slate-200">{item.title}</h4>
+                          <p className="text-xs text-slate-505 leading-relaxed font-semibold">{item.subtitle}</p>
                         </div>
-                        <Badge variant={item.badgeVariant} className="text-[9px] uppercase font-extrabold tracking-wider border-0 px-2 py-0.5">
+                        <Badge variant={item.badgeVariant} className="text-[9px] uppercase font-extrabold tracking-wider border-0 px-2.5 py-0.5 rounded-full">
                           {item.badge}
                         </Badge>
                       </div>

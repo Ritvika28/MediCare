@@ -8,55 +8,30 @@ import { enrichHospitalsWithDistance } from '../services/locationService.js';
 import { reverseGeocode } from '../services/geocodeService.js';
 import { fetchNearbyHospitalsFromGoogle } from '../services/placesService.js';
 import { fetchNearbyHospitalsFromOverpass } from '../services/overpassService.js';
+import { searchHospitals, buildHospitalSearchFilter } from '../services/hospitalSearchService.js';
 
 export const getHospitals = asyncHandler(async (req, res) => {
-  const filter = { isActive: true };
+  const { hospitals, total, page, limit, totalPages } = await searchHospitals({
+    search: req.query.search,
+    city: req.query.city,
+    state: req.query.state,
+    facilities: req.query.facilities,
+    lat: req.query.lat,
+    lng: req.query.lng,
+    sortBy: req.query.sortBy || req.query.sort,
+    page: req.query.page,
+    limit: req.query.limit,
+    maxDistanceMeters: req.query.maxDistance ? parseInt(req.query.maxDistance, 10) : undefined,
+  });
 
-  // City filter
-  if (req.query.city) {
-    filter['address.city'] = new RegExp(req.query.city, 'i');
-  }
-
-  // Facility filters (comma-separated list, e.g. ICU,Ambulance)
-  if (req.query.facilities) {
-    const facilityList = req.query.facilities.split(',');
-    facilityList.forEach((fac) => {
-      filter[`facilities.${fac.trim()}`] = true;
-    });
-  }
-
-  // Search keyword (hospital name or description)
-  if (req.query.search) {
-    filter.$or = [
-      { name: new RegExp(req.query.search, 'i') },
-      { description: new RegExp(req.query.search, 'i') },
-      { 'address.street': new RegExp(req.query.search, 'i') },
-      { 'address.city': new RegExp(req.query.search, 'i') }
-    ];
-  }
-
-  let query = Hospital.find(filter).populate('departments');
-
-  if (req.query.sort === 'rating') {
-    query = query.sort('-rating');
-  } else {
-    query = query.sort('-rating'); // default sorting
-  }
-
-  let hospitals = await query;
-
-  if (req.query.lat && req.query.lng) {
-    const lat = parseFloat(req.query.lat);
-    const lng = parseFloat(req.query.lng);
-    if (!Number.isNaN(lat) && !Number.isNaN(lng)) {
-      hospitals = enrichHospitalsWithDistance(hospitals, lat, lng);
-      if (req.query.sortBy === 'distance') {
-        hospitals.sort((a, b) => a.distance - b.distance);
-      }
-    }
-  }
-
-  res.json({ success: true, data: hospitals });
+  res.json({
+    success: true,
+    data: hospitals,
+    total,
+    page,
+    limit,
+    totalPages,
+  });
 });
 
 export const getNearbyHospitals = asyncHandler(async (req, res) => {
@@ -68,15 +43,17 @@ export const getNearbyHospitals = asyncHandler(async (req, res) => {
     throw new AppError('latitude and longitude query parameters are required', 400);
   }
 
-  console.log('[Nearby] User coordinates:', latitude, longitude);
-  console.log('[Nearby] Max distance (m):', maxDistance);
-
   const userLocation = await reverseGeocode(latitude, longitude);
-  console.log('[Nearby] Reverse geocode:', userLocation);
 
-  const allInDb = await Hospital.find({ isActive: true });
+  const filter = await buildHospitalSearchFilter({
+    search: req.query.search,
+    city: req.query.city,
+    state: req.query.state,
+    facilities: req.query.facilities,
+  });
+
+  const allInDb = await Hospital.find(filter).populate('departments');
   let networkHospitals = enrichHospitalsWithDistance(allInDb, latitude, longitude, maxDistance);
-  console.log('[Nearby] Network hospitals within range:', networkHospitals.length);
 
   let results = [...networkHospitals];
 
@@ -95,8 +72,7 @@ export const getNearbyHospitals = asyncHandler(async (req, res) => {
       (g) => !networkNames.has(g.name?.toLowerCase())
     );
     results = [...networkHospitals, ...uniqueGoogle].sort((a, b) => a.distance - b.distance);
-    console.log('[Nearby] Added Google places:', uniqueGoogle.length);
-  } else {
+  } else if (networkHospitals.length === 0) {
     const overpassHospitals = await fetchNearbyHospitalsFromOverpass(
       latitude,
       longitude,
@@ -107,14 +83,7 @@ export const getNearbyHospitals = asyncHandler(async (req, res) => {
       (o) => !networkNames.has(o.name?.toLowerCase())
     );
     results = [...networkHospitals, ...uniqueOverpass].sort((a, b) => a.distance - b.distance);
-    console.log('[Nearby] Added Overpass places:', uniqueOverpass.length);
   }
-
-  if (networkHospitals.length === 0 && results.length === 0) {
-    console.log('[Nearby] No hospitals within range — not returning distant seeded data');
-  }
-
-  console.log('[Nearby] Total results:', results.length);
 
   res.json({
     success: true,
@@ -164,7 +133,12 @@ export const getHospitalDoctors = asyncHandler(async (req, res) => {
   };
   if (req.query.departmentId) {
     filter.$and = [
-      { $or: [{ departmentId: req.query.departmentId }, { department: req.query.departmentId }] },
+      {
+        $or: [
+          { departmentId: req.query.departmentId },
+          { department: req.query.departmentId },
+        ],
+      },
     ];
   }
   if (req.query.specialization) {

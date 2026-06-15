@@ -22,7 +22,7 @@ const patientSchema = new mongoose.Schema(
       city: String,
       state: String,
       zipCode: String,
-      country: { type: String, default: 'USA' },
+      country: { type: String, default: 'India' },
     },
     emergencyContact: {
       name: String,

@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 
 const GEO_OPTIONS = {
   enableHighAccuracy: true,
@@ -103,6 +103,12 @@ export function useLocation({ requestOnMount = false } = {}) {
       GEO_OPTIONS
     );
   }, []);
+
+  useEffect(() => {
+    if (requestOnMount) {
+      requestLocation();
+    }
+  }, [requestOnMount, requestLocation]);
 
   return {
     location,

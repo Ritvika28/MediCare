@@ -34,8 +34,10 @@ export function HospitalCard({ hospital, showDistance = true }) {
     if (hospital.facilities.MRI) renderedFacilities.push({ label: 'MRI', icon: '🩻' });
     if (hospital.facilities.CTScan) renderedFacilities.push({ label: 'CT Scan', icon: '📡' });
     if (hospital.facilities.BloodBank) renderedFacilities.push({ label: 'Blood Bank', icon: '🩸' });
-    if (hospital.facilities.Dialysis) renderedFacilities.push({ label: 'Dialysis', icon: '💉' });
+    if (hospital.facilities.Dialysis) renderedFacilities.push({ label: 'Dialysis', icon: '💧' });
     if (hospital.facilities.Ventilator) renderedFacilities.push({ label: 'Ventilator', icon: '🫁' });
+    if (hospital.facilities.NICU) renderedFacilities.push({ label: 'NICU', icon: '👶' });
+    if (hospital.facilities.OperationTheatre) renderedFacilities.push({ label: 'Operation Theatre', icon: '🏨' });
   } else if (hospital.emergencyServices || hospital.emergencyAvailable) {
     renderedFacilities.push({ label: 'Emergency', icon: '🚨' });
   }

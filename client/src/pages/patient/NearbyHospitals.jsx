@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, RefreshCw, GitCompare, Navigation, AlertCircle, Sparkles, Filter, Search, Map, Grid, CheckCircle2 } from 'lucide-react';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
-import { hospitalService } from '@/services/hospitalService';
+import { hospitalService, INDIAN_CITIES, HOSPITAL_FACILITIES } from '@/services/hospitalService';
 import { HospitalCard } from '@/components/HospitalCard';
 import { NearbyHospitalMap } from '@/components/NearbyHospitalMap';
 import { Button } from '@/components/ui/Button';
@@ -39,14 +39,17 @@ export default function NearbyHospitals() {
     queryKey: ['hospitals-discovery', searchQuery, city, selectedFacilities, searchMode, latitude, longitude],
     queryFn: () => {
       if (searchMode === 'nearby' && latitude && longitude) {
-        return hospitalService.getNearby(latitude, longitude);
-      } else {
-        const params = {};
-        if (searchQuery) params.search = searchQuery;
-        if (city && city !== 'All') params.city = city;
-        if (selectedFacilities.length > 0) params.facilities = selectedFacilities.join(',');
-        return hospitalService.getAll(params);
+        return hospitalService.getNearby(latitude, longitude, {
+          search: searchQuery || undefined,
+          city: city !== 'All' ? city : undefined,
+          facilities: selectedFacilities.length ? selectedFacilities.join(',') : undefined,
+        });
       }
+      const params = {};
+      if (searchQuery) params.search = searchQuery;
+      if (city && city !== 'All') params.city = city;
+      if (selectedFacilities.length > 0) params.facilities = selectedFacilities.join(',');
+      return hospitalService.getAll(params);
     },
     keepPreviousData: true,
   });
@@ -138,9 +141,9 @@ export default function NearbyHospitals() {
                 className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 pl-11 focus:ring-2 focus:ring-teal-500 text-slate-850 dark:text-slate-100 shadow-inner outline-none appearance-none cursor-pointer transition"
               >
                 <option value="All">All Cities</option>
-                <option value="New York">New York</option>
-                <option value="Brooklyn">Brooklyn</option>
-                <option value="Lucknow">Lucknow</option>
+                {INDIAN_CITIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
 
@@ -231,13 +234,7 @@ export default function NearbyHospitals() {
                   Clinic Facilities
                 </label>
                 <div className="space-y-2">
-                  {[
-                    { key: 'Emergency', label: 'Emergency Admissions', icon: '🚨' },
-                    { key: 'ICU', label: 'Intensive Care Unit (ICU)', icon: '🏥' },
-                    { key: 'Ambulance', label: 'Ambulance Service', icon: '🚑' },
-                    { key: 'Pharmacy', label: 'In-house Pharmacy', icon: '💊' },
-                    { key: 'Lab', label: 'Diagnostics Laboratory', icon: '🧪' },
-                  ].map((fac) => {
+                  {HOSPITAL_FACILITIES.map((fac) => {
                     const isChecked = selectedFacilities.includes(fac.key);
                     return (
                       <button

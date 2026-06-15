@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
 import { api } from '@/api/axios';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -7,7 +8,7 @@ import { Badge } from '@/components/ui/Badge';
 import {
   HeartPulse, ChevronRight, ChevronLeft, Sparkles, History, AlertTriangle,
   CheckCircle2, Activity, Moon, Brain, Cigarette, Wine, Dumbbell,
-  Users, ArrowLeft, TrendingUp, ShieldCheck, Gauge
+  Users, ArrowLeft, TrendingUp, ShieldCheck, Gauge, Star, MapPin
 } from 'lucide-react';
 
 const STEPS = [
@@ -231,6 +232,84 @@ export default function HealthRiskAssessment() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Recommended Doctors & Hospitals */}
+        {showResults.recommendedDoctors?.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+              <Sparkles className="h-5 w-5 text-rose-500 animate-pulse" /> Recommended Specialists
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {showResults.recommendedDoctors.map(doc => (
+                <Card key={doc._id} className="border border-slate-200/85 dark:border-slate-800 rounded-2xl p-4 flex gap-4 hover:shadow-md transition">
+                  <div className="h-14 w-14 rounded-full bg-slate-100 dark:bg-slate-850 shrink-0 overflow-hidden flex items-center justify-center">
+                    {doc.user?.avatar ? (
+                      <img src={doc.user.avatar} alt={doc.user.lastName} className="h-full w-full object-cover" />
+                    ) : (
+                      <span className="text-lg font-black text-slate-400">Dr</span>
+                    )}
+                  </div>
+                  <div className="flex-1 space-y-1 min-w-0">
+                    <p className="text-sm font-black text-slate-900 dark:text-white truncate">
+                      Dr. {doc.user?.firstName} {doc.user?.lastName}
+                    </p>
+                    <p className="text-xs font-bold text-rose-600 dark:text-rose-450 truncate">{doc.specialization}</p>
+                    {doc.hospital?.name && (
+                      <p className="text-[11px] font-semibold text-slate-400 truncate flex items-center gap-1">
+                        <MapPin className="h-3 w-3 shrink-0" /> {doc.hospital.name}
+                      </p>
+                    )}
+                    <div className="pt-2 flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-300">₹{doc.consultationFee}</span>
+                      <Link to={`/patient/book/${doc._id}`}>
+                        <Button className="bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-[10px] font-bold px-3 py-1">
+                          Book Visit
+                        </Button>
+                      </Link>
+                    </div>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {showResults.recommendedHospitals?.length > 0 && (
+          <div className="space-y-4">
+            <h3 className="text-base font-black text-slate-800 dark:text-white flex items-center gap-2">
+              🏥 Recommended Care Centers
+            </h3>
+            <div className="grid gap-4 sm:grid-cols-2">
+              {showResults.recommendedHospitals.map(hosp => (
+                <Card key={hosp._id} className="border border-slate-200/85 dark:border-slate-800 rounded-2xl p-4 flex flex-col justify-between hover:shadow-md transition">
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-start">
+                      <p className="text-sm font-black text-slate-900 dark:text-white truncate">{hosp.name}</p>
+                      {hosp.rating > 0 && (
+                        <Badge className="bg-amber-50 dark:bg-amber-950/30 text-amber-600 dark:text-amber-400 border-0 flex items-center gap-1 font-bold shrink-0">
+                          <Star className="h-3 w-3 fill-current" /> {hosp.rating.toFixed(1)}
+                        </Badge>
+                      )}
+                    </div>
+                    {hosp.address && (
+                      <p className="text-xs text-slate-400 truncate flex items-center gap-1 mt-1">
+                        <MapPin className="h-3 w-3 shrink-0" /> {hosp.address.street}, {hosp.address.city}
+                      </p>
+                    )}
+                  </div>
+                  <div className="pt-3 border-t border-slate-55 dark:border-slate-800/80 mt-3 flex justify-between items-center">
+                    <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20 px-2 py-0.5 rounded-full">Open 24/7</span>
+                    <Link to={`/patient/hospitals/${hosp._id}`}>
+                      <Button variant="outline" className="rounded-xl text-[10px] font-bold px-3 py-1">
+                        View Details
+                      </Button>
+                    </Link>
+                  </div>
+                </Card>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     );
   }

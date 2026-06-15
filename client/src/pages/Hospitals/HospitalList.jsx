@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { MapPin, RefreshCw, GitCompare, Navigation, AlertCircle, Sparkles, Filter, Search, Map, Grid, CheckCircle2 } from 'lucide-react';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
-import { hospitalService } from '@/services/hospitalService';
+import { hospitalService, INDIAN_CITIES, HOSPITAL_FACILITIES } from '@/services/hospitalService';
 import { HospitalCard } from '@/components/HospitalCard';
 import { NearbyHospitalMap } from '@/components/NearbyHospitalMap';
 import { Button } from '@/components/ui/Button';
@@ -26,8 +26,15 @@ export default function HospitalList() {
   const [selectedFacilities, setSelectedFacilities] = useState([]);
   const [searchMode, setSearchMode] = useState('all'); // 'all' or 'nearby'
   const [showMap, setShowMap] = useState(false);
+  const [page, setPage] = useState(1);
+  const [sortBy, setSortBy] = useState('rating');
+  const limit = 6;
 
   const hasLocation = typeof latitude === 'number' && typeof longitude === 'number';
+
+  useEffect(() => {
+    setPage(1);
+  }, [searchQuery, city, selectedFacilities, searchMode, sortBy]);
 
   const {
     data: hospitalsResponse,
@@ -35,17 +42,26 @@ export default function HospitalList() {
     refetch: refetchHospitals,
     isError,
   } = useQuery({
-    queryKey: ['hospitals-discovery', searchQuery, city, selectedFacilities, searchMode, latitude, longitude],
+    queryKey: ['hospitals-discovery', searchQuery, city, selectedFacilities, searchMode, latitude, longitude, page, sortBy],
     queryFn: () => {
+      const facilities = selectedFacilities.length > 0 ? selectedFacilities.join(',') : undefined;
       if (searchMode === 'nearby' && latitude && longitude) {
-        return hospitalService.getNearby(latitude, longitude);
-      } else {
-        const params = {};
-        if (searchQuery) params.search = searchQuery;
-        if (city && city !== 'All') params.city = city;
-        if (selectedFacilities.length > 0) params.facilities = selectedFacilities.join(',');
-        return hospitalService.getAll(params);
+        return hospitalService.getNearby(latitude, longitude, {
+          search: searchQuery || undefined,
+          city: city !== 'All' ? city : undefined,
+          facilities,
+        });
       }
+      const params = { page, limit, sortBy };
+      if (searchQuery) params.search = searchQuery;
+      if (city && city !== 'All') params.city = city;
+      if (facilities) params.facilities = facilities;
+      if (latitude && longitude) {
+        params.lat = latitude;
+        params.lng = longitude;
+        if (sortBy === 'distance') params.sortBy = 'distance';
+      }
+      return hospitalService.getAll(params);
     },
     keepPreviousData: true,
   });
@@ -115,7 +131,7 @@ export default function HospitalList() {
               <Search className="absolute left-3.5 top-3.5 h-4.5 w-4.5 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search hospital by name, specialties, or street..."
+                placeholder="Search by name, city, specialty, facility (e.g. Lucknow MRI, Apollo ICU)..."
                 value={searchQuery}
                 onChange={(e) => {
                   setSearchMode('all');
@@ -137,9 +153,9 @@ export default function HospitalList() {
                 className="w-full text-sm rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 p-3 pl-11 focus:ring-2 focus:ring-teal-500 text-slate-850 dark:text-slate-100 shadow-inner outline-none appearance-none cursor-pointer transition"
               >
                 <option value="All">All Cities</option>
-                <option value="New York">New York</option>
-                <option value="Brooklyn">Brooklyn</option>
-                <option value="Lucknow">Lucknow</option>
+                {INDIAN_CITIES.map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
               </select>
             </div>
 
@@ -230,18 +246,7 @@ export default function HospitalList() {
                   Clinic Facilities
                 </label>
                 <div className="space-y-2">
-                  {[
-                    { key: 'Emergency', label: 'Emergency Admissions', icon: '🚨' },
-                    { key: 'ICU', label: 'Intensive Care Unit (ICU)', icon: '🏥' },
-                    { key: 'Ambulance', label: 'Ambulance Service', icon: '🚑' },
-                    { key: 'Pharmacy', label: 'In-house Pharmacy', icon: '💊' },
-                    { key: 'Lab', label: 'Diagnostics Laboratory', icon: '🧪' },
-                    { key: 'MRI', label: 'MRI Scanner', icon: '🧲' },
-                    { key: 'CTScan', label: 'CT Scanner', icon: '🌀' },
-                    { key: 'BloodBank', label: 'Blood Bank Services', icon: '🩸' },
-                    { key: 'Dialysis', label: 'Dialysis Unit', icon: '💧' },
-                    { key: 'Ventilator', label: 'Ventilator Support', icon: '🫁' },
-                  ].map((fac) => {
+                  {HOSPITAL_FACILITIES.map((fac) => {
                     const isChecked = selectedFacilities.includes(fac.key);
                     return (
                       <button
@@ -281,8 +286,20 @@ export default function HospitalList() {
                 </Badge>
               ))}
             </div>
-            <div className="text-xs text-slate-400 font-bold shrink-0">
-              {hospitalsLoading ? 'Searching...' : `${hospitals.length} match(es) found`}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-bold text-slate-450 dark:text-slate-400">Sort by:</label>
+              <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value)}
+                className="text-xs font-bold rounded-lg border border-slate-250 dark:border-slate-800 bg-white dark:bg-slate-950 p-1.5 focus:ring-2 focus:ring-teal-500 text-slate-700 dark:text-slate-200 outline-none cursor-pointer"
+              >
+                <option value="rating">⭐️ Rating</option>
+                {hasLocation && <option value="distance">📍 Distance</option>}
+                <option value="beds">🛏️ Available Beds</option>
+              </select>
+              <div className="text-xs text-slate-400 font-bold shrink-0 ml-2">
+                {hospitalsLoading ? 'Searching...' : `${hospitalsResponse?.total || hospitals.length} match(es)`}
+              </div>
             </div>
           </div>
 
@@ -328,37 +345,56 @@ export default function HospitalList() {
               )}
 
               {!showMap && (
-                <div className="grid gap-4 sm:grid-cols-2">
-                  {hospitalsLoading ? (
-                    Array.from({ length: 4 }).map((_, i) => (
-                      <Skeleton key={i} className="h-80 rounded-2xl" />
-                    ))
-                  ) : hospitals.length === 0 ? (
-                    <div className="col-span-full text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-dashed dark:border-slate-800">
-                      <AlertCircle className="h-10 w-10 text-slate-400 mx-auto mb-2" />
-                      <p className="font-extrabold text-slate-850 dark:text-slate-200 text-base">No clinics or hospitals match</p>
-                      <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
-                        Modify search term or check alternate facilities checkboxes.
-                      </p>
-                      <Button onClick={clearAllFilters} className="mt-4 bg-teal-650 hover:bg-teal-700 text-white text-xs font-bold">
-                        Reset Filters
+                <div className="space-y-6">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    {hospitalsLoading ? (
+                      Array.from({ length: 4 }).map((_, i) => (
+                        <Skeleton key={i} className="h-80 rounded-2xl" />
+                      ))
+                    ) : hospitals.length === 0 ? (
+                      <div className="col-span-full text-center py-16 bg-white dark:bg-slate-900 rounded-2xl border border-dashed dark:border-slate-800">
+                        <AlertCircle className="h-10 w-10 text-slate-400 mx-auto mb-2" />
+                        <p className="font-extrabold text-slate-850 dark:text-slate-200 text-base">No clinics or hospitals match</p>
+                        <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                          Modify search term or check alternate facilities checkboxes.
+                        </p>
+                        <Button onClick={clearAllFilters} className="mt-4 bg-teal-650 hover:bg-teal-700 text-white text-xs font-bold">
+                          Reset Filters
+                        </Button>
+                      </div>
+                    ) : (
+                      hospitals.map((h) => (
+                        <div key={h._id} className="relative group">
+                          {h.isNetworkHospital !== false && !String(h._id).startsWith('google_') && !String(h._id).startsWith('overpass_') && (
+                            <input
+                              type="checkbox"
+                              checked={selected.includes(h._id)}
+                              onChange={() => toggleCompare(h._id)}
+                              className="absolute right-4 top-4 z-10 h-4.5 w-4.5 cursor-pointer accent-teal-600 rounded"
+                              title="Compare clinic statistics"
+                            />
+                          )}
+                          <HospitalCard hospital={h} showDistance={searchMode === 'nearby' || sortBy === 'distance'} />
+                        </div>
+                      ))
+                    )}
+                  </div>
+
+                  {/* Pagination */}
+                  {searchMode !== 'nearby' && (hospitalsResponse?.totalPages || 0) > 1 && (
+                    <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-slate-800">
+                      <Button type="button" variant="outline" onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page <= 1}
+                        className="rounded-xl gap-2 text-xs font-bold">
+                        ← Previous
+                      </Button>
+                      <span className="text-xs font-bold text-slate-500">
+                        Page {hospitalsResponse?.page || page} of {hospitalsResponse?.totalPages}
+                      </span>
+                      <Button type="button" variant="outline" onClick={() => setPage(p => p + 1)} disabled={page >= (hospitalsResponse?.totalPages || 1)}
+                        className="rounded-xl gap-2 text-xs font-bold">
+                        Next →
                       </Button>
                     </div>
-                  ) : (
-                    hospitals.map((h) => (
-                      <div key={h._id} className="relative group">
-                        {h.isNetworkHospital !== false && !String(h._id).startsWith('google_') && !String(h._id).startsWith('overpass_') && (
-                          <input
-                            type="checkbox"
-                            checked={selected.includes(h._id)}
-                            onChange={() => toggleCompare(h._id)}
-                            className="absolute right-4 top-4 z-10 h-4.5 w-4.5 cursor-pointer accent-teal-600 rounded"
-                            title="Compare clinic statistics"
-                          />
-                        )}
-                        <HospitalCard hospital={h} showDistance={searchMode === 'nearby'} />
-                      </div>
-                    ))
                   )}
                 </div>
               )}
