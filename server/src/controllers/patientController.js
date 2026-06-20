@@ -202,6 +202,7 @@ export const getHealthMetrics = asyncHandler(async (req, res) => {
 
   const types = ['bmi', 'blood_pressure', 'blood_sugar', 'sleep_assessment', 'stress_assessment', 'kidney_health', 'liver_health', 'heart_health', 'diabetes_risk'];
   const latest = await getLatestMetrics(patient._id, types);
+  const records = await MedicalRecord.find({ patient: patient._id });
   const healthScore = calculateHealthScore(patient, records);
 
   res.json({

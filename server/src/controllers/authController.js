@@ -8,9 +8,11 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { generateAccessToken, generateRefreshToken } from '../utils/generateTokens.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
 
-const sendTokens = (user, res) => {
+const sendTokens = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role);
   const refreshToken = generateRefreshToken(user._id);
+
+  await User.findByIdAndUpdate(user._id, { refreshToken });
 
   const cookieOptions = {
     httpOnly: true,
@@ -52,24 +54,22 @@ export const register = asyncHandler(async (req, res) => {
     await Patient.create({ user: user._id });
   }
 
-  sendTokens(user, res);
+  await sendTokens(user, res);
 });
 
 export const login = asyncHandler(async (req, res) => {
   const email = req.body.email?.trim().toLowerCase();
   const { password } = req.body;
-  const user = await User.findOne({ email }).select('+password +refreshToken');
+  const user = await User.findOne({ email }).select('+password');
   if (!user || !(await user.comparePassword(password))) {
     throw new AppError('Invalid email or password', 401);
   }
   if (!user.isActive) throw new AppError('Account deactivated', 403);
 
   user.lastLogin = new Date();
-  const refreshToken = generateRefreshToken(user._id);
-  user.refreshToken = refreshToken;
   await user.save({ validateBeforeSave: false });
 
-  sendTokens(user, res);
+  await sendTokens(user, res);
 });
 
 export const refresh = asyncHandler(async (req, res) => {
@@ -141,7 +141,7 @@ export const resetPassword = asyncHandler(async (req, res) => {
   user.passwordResetExpires = undefined;
   await user.save();
 
-  sendTokens(user, res);
+  await sendTokens(user, res);
 });
 
 export const updatePassword = asyncHandler(async (req, res) => {
