@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useNavigate, useLocation, useMatches } from 'react-router-dom';
+import { Link, NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   LayoutDashboard, Calendar, FileText, Pill, Bell, User, Users, Stethoscope,
@@ -7,11 +7,13 @@ import {
   AlertTriangle, Clock, Calculator, HeartPulse, Droplet, MapPin, ChevronRight,
   ArrowLeft,
 } from 'lucide-react';
+import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '@/context/AuthContext';
 import { useTheme } from '@/context/ThemeContext';
 import { Button } from '@/components/ui/Button';
+import { api } from '@/api/axios';
 import { cn } from '@/lib/utils';
-import { EmergencyButton } from '@/components/EmergencyButton';
+
 
 const navByRole = {
   patient: [
@@ -81,6 +83,16 @@ export function DashboardLayout({ role }) {
   const navItems = navByRole[role] || [];
   const breadcrumbs = useBreadcrumbs(role, navItems);
   const location = useLocation();
+
+  // Live unread notification count for the bell badge
+  const { data: notifData } = useQuery({
+    queryKey: ['notification-summary'],
+    queryFn: () => api.get('/notifications', { params: { limit: 1 } }).then(r => r.data),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
+    enabled: !!user,
+  });
+  const unreadCount = notifData?.unreadCount ?? 0;
 
   // Only show back button when not on the root dashboard page
   const isRoot = location.pathname === `/${role}` || location.pathname === `/${role}/`;
@@ -194,6 +206,11 @@ export function DashboardLayout({ role }) {
             <Link to={`/${role}/notifications`}>
               <Button variant="ghost" size="icon" className="rounded-xl relative">
                 <Bell className="h-4.5 w-4.5" />
+                {unreadCount > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-rose-500 text-[9px] font-black text-white shadow border border-white dark:border-slate-900">
+                    {unreadCount > 9 ? '9+' : unreadCount}
+                  </span>
+                )}
               </Button>
             </Link>
           </div>
@@ -203,7 +220,6 @@ export function DashboardLayout({ role }) {
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3 }}>
             <Outlet />
           </motion.div>
-          {role === 'patient' && <EmergencyButton />}
         </main>
       </div>
     </div>

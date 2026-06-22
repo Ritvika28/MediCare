@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { motion } from 'framer-motion';
@@ -13,7 +13,7 @@ import { Skeleton } from '@/components/ui/Skeleton';
 import {
   Calendar, FileText, Pill, Activity, User, Phone, Droplet,
   Sparkles, Shield, FileHeart, Award, HeartPulse, Heart,
-  Building2, AlertCircle, ChevronDown, ChevronUp
+  Building2, AlertCircle, ChevronDown, ChevronUp, MapPin
 } from 'lucide-react';
 import { useHealthTwin, usePredictions, useForecast, useAnomalies } from '@/hooks/useML';
 
@@ -48,13 +48,21 @@ export default function PatientProfile() {
   const { data: forecastData } = useForecast();
   const { data: anomaliesData } = useAnomalies();
 
+  const [allergyInput, setAllergyInput] = useState('');
+  const [allergies, setAllergies] = useState(profile?.allergies || []);
+  const allergyInputRef = useRef(null);
+
   const { register, handleSubmit, watch, reset } = useForm({
     defaultValues: {
       firstName: user?.firstName || '',
       lastName: user?.lastName || '',
       phone: user?.phone || '',
+      dateOfBirth: profile?.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : '',
       bloodGroup: profile?.bloodGroup || '',
       gender: profile?.gender || '',
+      addressCity: profile?.address?.city || '',
+      addressState: profile?.address?.state || '',
+      addressZip: profile?.address?.zipCode || '',
       insuranceProvider: profile?.insuranceProvider || '',
       insuranceNumber: profile?.insuranceNumber || '',
       emergencyContactName: profile?.emergencyContact?.name || '',
@@ -70,14 +78,19 @@ export default function PatientProfile() {
         firstName: user?.firstName || '',
         lastName: user?.lastName || '',
         phone: user?.phone || '',
+        dateOfBirth: profile?.dateOfBirth ? new Date(profile.dateOfBirth).toISOString().split('T')[0] : '',
         bloodGroup: profile?.bloodGroup || '',
         gender: profile?.gender || '',
+        addressCity: profile?.address?.city || '',
+        addressState: profile?.address?.state || '',
+        addressZip: profile?.address?.zipCode || '',
         insuranceProvider: profile?.insuranceProvider || '',
         insuranceNumber: profile?.insuranceNumber || '',
         emergencyContactName: profile?.emergencyContact?.name || '',
         emergencyContactPhone: profile?.emergencyContact?.phone || '',
         emergencyContactRelationship: profile?.emergencyContact?.relationship || '',
       });
+      if (profile?.allergies?.length) setAllergies(profile.allergies);
     }
   }, [user, profile, reset]);
 
@@ -88,11 +101,14 @@ export default function PatientProfile() {
       watchedValues.firstName,
       watchedValues.lastName,
       watchedValues.phone,
+      watchedValues.dateOfBirth,
       watchedValues.bloodGroup,
       watchedValues.gender,
+      watchedValues.addressCity,
       watchedValues.insuranceProvider,
       watchedValues.emergencyContactName,
       watchedValues.emergencyContactPhone,
+      allergies.length > 0 ? 'filled' : '',
     ];
     const filled = fields.filter(val => !!val?.trim?.() || !!val).length;
     return Math.round((filled / fields.length) * 100);
@@ -106,8 +122,16 @@ export default function PatientProfile() {
         firstName: data.firstName,
         lastName: data.lastName,
         phone: data.phone,
+        dateOfBirth: data.dateOfBirth || undefined,
         bloodGroup: data.bloodGroup,
         gender: data.gender,
+        allergies,
+        address: {
+          city: data.addressCity,
+          state: data.addressState,
+          zipCode: data.addressZip,
+          country: 'India',
+        },
         insuranceProvider: data.insuranceProvider,
         insuranceNumber: data.insuranceNumber,
         emergencyContact: {
@@ -124,6 +148,16 @@ export default function PatientProfile() {
     },
     onError: () => toast('Failed to update profile', 'error'),
   });
+
+  const addAllergy = () => {
+    const val = allergyInput.trim();
+    if (!val || allergies.includes(val)) { setAllergyInput(''); return; }
+    setAllergies(prev => [...prev, val]);
+    setAllergyInput('');
+    allergyInputRef.current?.focus();
+  };
+
+  const removeAllergy = (a) => setAllergies(prev => prev.filter(x => x !== a));
 
   const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
     queryKey: ['profile-appointments'],
@@ -394,6 +428,11 @@ export default function PatientProfile() {
                   <Input {...register('phone')} placeholder="+91 9876543210" className="text-xs rounded-xl" />
                 </div>
 
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Date of Birth</label>
+                  <Input {...register('dateOfBirth')} type="date" className="text-xs rounded-xl" />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider block">Blood Group</label>
@@ -409,7 +448,49 @@ export default function PatientProfile() {
                       <option value="male">Male</option>
                       <option value="female">Female</option>
                       <option value="other">Other</option>
+                      <option value="prefer_not_to_say">Prefer not to say</option>
                     </select>
+                  </div>
+                </div>
+
+                {/* Address */}
+                <div className="pt-1 border-t dark:border-slate-800">
+                  <div className="flex items-center gap-2 mb-3 pt-2">
+                    <MapPin className="h-4 w-4 text-teal-500" />
+                    <p className="text-[10px] font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">Address</p>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input {...register('addressCity')} placeholder="City" className="text-xs rounded-xl" />
+                    <Input {...register('addressState')} placeholder="State" className="text-xs rounded-xl" />
+                  </div>
+                  <Input {...register('addressZip')} placeholder="PIN / ZIP Code" className="text-xs rounded-xl mt-2" />
+                </div>
+
+                {/* Allergies */}
+                <div className="pt-1 border-t dark:border-slate-800">
+                  <div className="flex items-center gap-2 mb-3 pt-2">
+                    <AlertCircle className="h-4 w-4 text-amber-500" />
+                    <p className="text-[10px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">Known Allergies</p>
+                  </div>
+                  <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
+                    {allergies.map(a => (
+                      <span key={a} className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 dark:bg-amber-950/30 text-amber-700 dark:text-amber-400 text-[10px] font-bold border border-amber-100 dark:border-amber-900">
+                        {a}
+                        <button type="button" onClick={() => removeAllergy(a)} className="text-amber-400 hover:text-amber-700">×</button>
+                      </span>
+                    ))}
+                    {allergies.length === 0 && <span className="text-[10px] text-slate-400 font-semibold">No allergies recorded</span>}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      ref={allergyInputRef}
+                      value={allergyInput}
+                      onChange={e => setAllergyInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), addAllergy())}
+                      placeholder="Type allergy & press Enter"
+                      className="text-xs rounded-xl flex-1 h-8"
+                    />
+                    <Button type="button" onClick={addAllergy} size="sm" className="h-8 px-3 text-xs rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-bold">Add</Button>
                   </div>
                 </div>
 

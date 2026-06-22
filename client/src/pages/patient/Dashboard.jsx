@@ -4,13 +4,12 @@ import {
   MapPin, AlertTriangle, FileText, Bot, Building2, Activity,
   Clock, Calculator, HeartPulse, Droplet, Check, FileHeart,
   TrendingUp, Pill, Award, ShieldAlert, ArrowRight, Stethoscope, Sparkles,
-  Syringe, Heart, Archive
+  Syringe, Heart, Archive, Bell
 } from 'lucide-react';
 import { useAuth } from '@/context/AuthContext';
 import { api } from '@/api/axios';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { StatCard } from '@/components/shared/StatCard';
-import { EmergencyButton } from '@/components/EmergencyButton';
 import { DashboardNotificationPanels } from '@/components/dashboard/DashboardNotificationPanels';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -35,14 +34,16 @@ const colorClasses = {
 };
 
 const quickActions = [
-  { to: '/doctors', icon: Stethoscope, label: 'Find Doctors', color: 'blue' },
-  { to: '/patient/hospitals', icon: Building2, label: 'Find Hospitals', color: 'teal' },
-  { to: '/patient/nearby-labs', icon: MapPin, label: 'Nearby Labs', color: 'emerald' },
-  { to: '/patient/blood-banks', icon: Droplet, label: 'Blood Banks', color: 'red' },
   { to: '/patient/records', icon: FileText, label: 'Medical Records', color: 'purple' },
   { to: '/patient/prescriptions', icon: Archive, label: 'Prescription Vault', color: 'indigo' },
+  { to: '/patient/medicine-reminder', icon: Clock, label: 'Medicine Reminder', color: 'violet' },
+  { to: '/patient/health-calculators', icon: Calculator, label: 'Health Calculators', color: 'amber' },
+  { to: '/doctors', icon: Stethoscope, label: 'Find Doctors', color: 'blue' },
+  { to: '/patient/hospitals', icon: Building2, label: 'Find Hospitals', color: 'teal' },
+  { to: '/patient/blood-banks', icon: Droplet, label: 'Blood Banks', color: 'red' },
+  { to: '/patient/nearby-labs', icon: MapPin, label: 'Nearby Labs', color: 'emerald' },
   { to: '/patient/ai-assistant', icon: Bot, label: 'AI Assistant', color: 'cyan' },
-  { to: '/patient/emergency-hub', icon: AlertTriangle, label: 'Emergency SOS', color: 'rose' },
+  { to: '/patient/notifications', icon: Bell, label: 'Notifications', color: 'orange' },
 ];
 
 export default function PatientDashboard() {
@@ -102,8 +103,6 @@ export default function PatientDashboard() {
 
   return (
     <div className="space-y-8">
-      <EmergencyButton />
-
       {/* Top Banner */}
       <div className="relative flex flex-wrap items-center justify-between gap-4 rounded-3xl bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-6 md:p-8 text-white shadow-xl overflow-hidden border border-slate-800">
         <div className="absolute inset-0 opacity-10 pointer-events-none">
@@ -116,11 +115,6 @@ export default function PatientDashboard() {
           <p className="text-slate-400 text-sm max-w-md">Your personal health dashboard — track vitals, medications, and wellness all in one place.</p>
         </div>
         <div className="relative z-10 flex flex-wrap gap-2">
-          <Link to="/patient/emergency">
-            <Button className="bg-rose-500 hover:bg-rose-600 font-bold text-white border-0 shadow-lg animate-pulse rounded-xl">
-              <AlertTriangle className="h-4 w-4 mr-1.5" /> Emergency SOS
-            </Button>
-          </Link>
           <Link to="/patient/health-calculators">
             <Button variant="outline" className="bg-white/10 border-slate-700 text-white hover:bg-white/20 font-bold rounded-xl">
               <Calculator className="h-4 w-4 mr-1.5" /> Log Health Data

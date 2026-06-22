@@ -24,7 +24,7 @@ import PatientPrescriptions from '@/pages/patient/Prescriptions';
 import AIAssistant from '@/pages/patient/AIAssistant';
 import PatientNotifications from '@/pages/patient/Notifications';
 import PatientProfile from '@/pages/patient/Profile';
-import Emergency from '@/pages/patient/Emergency';
+// Emergency.jsx replaced by EmergencyHub
 import HealthScore from '@/pages/patient/HealthScore';
 import HealthTwinDashboard from '@/pages/patient/HealthTwinDashboard';
 
@@ -83,7 +83,7 @@ export function AppRoutes() {
           <Route path="ai-assistant" element={<AIAssistant />} />
           <Route path="notifications" element={<PatientNotifications />} />
           <Route path="profile" element={<PatientProfile />} />
-          <Route path="emergency" element={<Emergency />} />
+          <Route path="emergency" element={<Navigate to="/patient/emergency-hub" replace />} />
           <Route path="health-score" element={<HealthScore />} />
           <Route path="health-twin" element={<HealthTwinDashboard />} />
           <Route path="medicine-reminder" element={<MedicineReminder />} />

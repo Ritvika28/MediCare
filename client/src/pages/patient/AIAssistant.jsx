@@ -9,7 +9,7 @@ import { Card, CardContent } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { 
-  Bot, Send, User, Sparkles, Plus, Trash2, AlertOctagon, Heart, Phone, 
+  Bot, Send, User, Sparkles, Plus, Trash2,
   ShieldAlert, History, Copy, Check, RotateCcw 
 } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -24,7 +24,7 @@ const QUICK_PROMPTS = [
   { text: "I have a headache and fever", icon: "🤒" },
   { text: "My knee joints are hurting", icon: "🦴" },
   { text: "I have red skin rashes", icon: "🔴" },
-  { text: "Emergency: severe chest pain", icon: "🚨" }
+  { text: "I have severe chest pain", icon: "🚨" }
 ];
 
 export default function AIAssistant() {
@@ -35,7 +35,7 @@ export default function AIAssistant() {
   const [messages, setMessages] = useState([
     { 
       role: 'assistant', 
-      content: "Hello! I'm HealthAssist, your intelligent medical companion. How can I help you today? You can describe any symptoms to receive department and expert suggestions.",
+      content: "Hello! I'm **HealthAssist**, your personal AI health companion powered by MediCare.\n\nDescribe your symptoms and I'll help identify what you might be experiencing, suggest relevant medical specialists, and guide you on next steps.\n\n⚠️ For life-threatening emergencies, always call **112** or visit the **Emergency Hub** immediately.",
       timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
     },
   ]);
@@ -160,7 +160,7 @@ export default function AIAssistant() {
     setMessages([
       { 
         role: 'assistant', 
-        content: "Hello! I'm HealthAssist, your intelligent medical companion. How can I help you today? You can describe any symptoms to receive department and expert suggestions.",
+        content: "Hello! I'm **HealthAssist**, your personal AI health companion powered by MediCare.\n\nDescribe your symptoms and I'll help identify what you might be experiencing, suggest relevant medical specialists, and guide you on next steps.\n\n⚠️ For life-threatening emergencies, always call **112** or visit the **Emergency Hub** immediately.",
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
       }
     ]);

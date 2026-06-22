@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/Badge';
 import { 
   FileText, Upload, Download, Search, Sparkles, Filter, 
   X, Calendar, Clipboard, HeartPulse, Activity, Pill, Beaker,
-  Trash2, Info
+  Trash2, Info, AlertCircle
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
@@ -26,13 +26,15 @@ export default function PatientRecords() {
   const [showUploadModal, setShowUploadModal] = useState(false);
   
   const [recordToDelete, setRecordToDelete] = useState(null);
-  const [lastDeletedRecord, setLastDeletedRecord] = useState(null);
-  const [undoTimer, setUndoTimer] = useState(null);
 
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/records/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries(['records']);
+      queryClient.invalidateQueries({ queryKey: ['records', profile?._id] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['profile-records'] });
+      queryClient.invalidateQueries({ queryKey: ['health-analytics'] });
+      toast('Medical record deleted successfully!', 'success');
     },
     onError: () => {
       toast('Failed to delete medical record. Try again.', 'error');
@@ -43,32 +45,9 @@ export default function PatientRecords() {
     if (!recordToDelete) return;
     const record = recordToDelete;
     setRecordToDelete(null);
-    setLastDeletedRecord(record);
-
-    const previousRecords = queryClient.getQueryData(['records', profile?._id]) || [];
-    queryClient.setQueryData(['records', profile?._id], previousRecords.filter(r => r._id !== record._id));
-    toast('Record deleted.', 'success');
-
-    const timer = setTimeout(() => {
-      deleteMutation.mutate(record._id);
-      setLastDeletedRecord(null);
-      setUndoTimer(null);
-    }, 5000);
-
-    setUndoTimer(timer);
+    deleteMutation.mutate(record._id);
   };
 
-  const handleUndoDelete = () => {
-    if (undoTimer) {
-      clearTimeout(undoTimer);
-      setUndoTimer(null);
-    }
-    if (lastDeletedRecord) {
-      queryClient.invalidateQueries(['records']);
-      setLastDeletedRecord(null);
-      toast('Record restored!', 'info');
-    }
-  };
   
   // Upload form state
   const [selectedFile, setSelectedFile] = useState(null);
@@ -235,21 +214,6 @@ export default function PatientRecords() {
             </div>
           </CardContent>
         </Card>
-
-        {undoTimer && (
-          <div className="flex items-center justify-between p-3.5 rounded-xl border border-teal-200 bg-teal-50 dark:bg-teal-950/20 text-teal-850 dark:text-teal-400 text-xs font-bold shadow-sm animate-in fade-in slide-in-from-top-2">
-            <span className="flex items-center gap-2">
-              <Info className="h-4 w-4 text-teal-650 shrink-0" />
-              Medical record "{lastDeletedRecord?.title}" was deleted.
-            </span>
-            <button 
-              onClick={handleUndoDelete}
-              className="px-3 py-1.5 bg-teal-600 hover:bg-teal-700 text-white rounded-lg transition text-xs font-black"
-            >
-              Undo
-            </button>
-          </div>
-        )}
 
         {/* Records list */}
         <div className="grid gap-4 md:grid-cols-2">
