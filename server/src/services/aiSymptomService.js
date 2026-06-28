@@ -2,65 +2,39 @@ import { Department } from '../models/Department.js';
 import { Doctor } from '../models/Doctor.js';
 import { Hospital } from '../models/Hospital.js';
 import { haversineDistance } from './locationService.js';
+import { triageSymptoms } from './geminiTriageService.js';
 import { chatWithAI } from './aiService.js';
 
-const SYMPTOM_DEPARTMENT_MAP = {
-  heart: 'Cardiology',
-  chest: 'Cardiology',
-  cardiac: 'Cardiology',
-  skin: 'Dermatology',
-  rash: 'Dermatology',
-  bone: 'Orthopedics',
-  joint: 'Orthopedics',
-  fracture: 'Orthopedics',
-  child: 'Pediatrics',
-  pediatric: 'Pediatrics',
-  baby: 'Pediatrics',
-  eye: 'Ophthalmology',
-  vision: 'Ophthalmology',
-  brain: 'Neurology',
-  headache: 'Neurology',
-  migraine: 'Neurology',
-  stomach: 'Gastroenterology',
-  digestive: 'Gastroenterology',
-  mental: 'Psychiatry',
-  anxiety: 'Psychiatry',
-  depression: 'Psychiatry',
-  fever: 'General Medicine',
-  cold: 'General Medicine',
-  flu: 'General Medicine',
-  cough: 'General Medicine',
-};
-
-export const analyzeSymptoms = (symptomsText = '') => {
-  const lower = symptomsText.toLowerCase();
-  let departmentName = 'General Medicine';
-  let confidence = 0.5;
-
-  for (const [keyword, dept] of Object.entries(SYMPTOM_DEPARTMENT_MAP)) {
-    if (lower.includes(keyword)) {
-      departmentName = dept;
-      confidence = 0.85;
-      break;
-    }
-  }
-
-  return { departmentName, confidence, disclaimer: 'AI suggestions are not a substitute for professional medical diagnosis.' };
+export const analyzeSymptoms = async (symptomsText = '', options = {}) => {
+  const triage = await triageSymptoms(symptomsText, options);
+  return {
+    departmentName: triage.department,
+    recommendedSpecialist: triage.recommendedSpecialist,
+    urgencyLevel: triage.urgencyLevel,
+    emergencyWarning: triage.emergencyWarning,
+    confidence: triage.confidence,
+    conditions: triage.conditions,
+    disclaimer: 'AI suggestions are not a substitute for professional medical diagnosis.',
+  };
 };
 
 export const getRecommendations = async ({ symptoms, latitude, longitude, hospitalId }) => {
-  const analysis = analyzeSymptoms(symptoms);
+  const analysis = await analyzeSymptoms(symptoms, { lat: latitude, lng: longitude });
   let hospitals = [];
+
+  const lat = parseFloat(latitude);
+  const lng = parseFloat(longitude);
+  const hasCoords = !Number.isNaN(lat) && !Number.isNaN(lng);
 
   if (hospitalId) {
     const h = await Hospital.findById(hospitalId).populate('departments');
     if (h) hospitals = [h];
-  } else if (latitude && longitude) {
+  } else if (hasCoords) {
     hospitals = await Hospital.find({
       isActive: true,
       location: {
         $near: {
-          $geometry: { type: 'Point', coordinates: [parseFloat(longitude), parseFloat(latitude)] },
+          $geometry: { type: 'Point', coordinates: [lng, lat] },
           $maxDistance: 50000,
         },
       },
@@ -127,9 +101,7 @@ export const getRecommendations = async ({ symptoms, latitude, longitude, hospit
     aiInsight = null;
   }
 
-  const lat = parseFloat(latitude);
-  const lng = parseFloat(longitude);
-  if (!Number.isNaN(lat) && !Number.isNaN(lng) && recommendedHospital.location?.coordinates) {
+  if (hasCoords && recommendedHospital.location?.coordinates) {
     const [hLng, hLat] = recommendedHospital.location.coordinates;
     recommendedHospital._doc = recommendedHospital._doc || {};
     recommendedHospital._doc.distance = haversineDistance(lat, lng, hLat, hLng);

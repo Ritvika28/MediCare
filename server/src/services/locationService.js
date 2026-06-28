@@ -9,14 +9,18 @@ export const haversineDistance = (lat1, lon1, lat2, lon2) => {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 };
 
+export const haversineDistanceKm = (lat1, lon1, lat2, lon2) => {
+  return haversineDistance(lat1, lon1, lat2, lon2) / 1000;
+};
+
 export const formatDistance = (meters) => {
   if (meters == null || Number.isNaN(meters)) return '';
   if (meters < 1000) return `${Math.round(meters)} m away`;
   return `${(meters / 1000).toFixed(1)} km away`;
 };
 
-export const getGoogleMapsRouteUrl = (fromLat, fromLng, toLat, toLng) => {
-  return `https://www.google.com/maps/dir/?api=1&origin=${fromLat},${fromLng}&destination=${toLat},${toLng}&travelmode=driving`;
+export const getOpenStreetMapRouteUrl = (fromLat, fromLng, toLat, toLng) => {
+  return `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${fromLat}%2C${fromLng}%3B${toLat}%2C${toLng}`;
 };
 
 export const enrichHospitalWithDistance = (hospital, userLat, userLng) => {
@@ -51,3 +55,4 @@ export const enrichHospitalsWithDistance = (hospitals, lat, lng, maxDistanceMete
     .filter((h) => h.distance != null && h.distance <= maxDistanceMeters)
     .sort((a, b) => a.distance - b.distance);
 };
+

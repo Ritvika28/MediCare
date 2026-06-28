@@ -3,9 +3,10 @@ import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { chatWithAI, suggestDoctorsBySymptoms } from '../services/aiService.js';
 import { detectEmergencySymptoms, generateAINotification } from '../services/notificationEngineService.js';
+import { handleGeminiError } from '../utils/geminiErrorHandler.js';
 
 export const sendAIMessage = asyncHandler(async (req, res) => {
-  const { message, conversationId } = req.body;
+  const { message, conversationId, latitude, longitude } = req.body;
   if (!message?.trim()) throw new AppError('Message required', 400);
 
   let conversation;
@@ -23,7 +24,14 @@ export const sendAIMessage = asyncHandler(async (req, res) => {
   conversation.messages.push({ role: 'user', content: message });
 
   const history = conversation.messages.slice(-20).map((m) => ({ role: m.role, content: m.content }));
-  const aiResponse = await chatWithAI(history, req.user._id);
+  
+  let aiResponse;
+  try {
+    aiResponse = await chatWithAI(history, req.user._id, { latitude, longitude, conversationId: conversation._id });
+  } catch (err) {
+    const { status, payload } = handleGeminiError(err, req.user._id, 'gemini-2.5-flash');
+    return res.status(status).json(payload);
+  }
 
   if (detectEmergencySymptoms(message)) {
     await generateAINotification(req.user._id, message, true);

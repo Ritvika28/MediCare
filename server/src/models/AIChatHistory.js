@@ -14,6 +14,11 @@ const aiChatHistorySchema = new mongoose.Schema(
     title: { type: String, default: 'New conversation' },
     messages: [aiMessageSchema],
     isActive: { type: Boolean, default: true },
+    interviewState: { type: String, enum: ['idle', 'interviewing', 'completed'], default: 'idle' },
+    interviewSymptoms: { type: String, default: '' },
+    interviewCollectedInfo: { type: mongoose.Schema.Types.Mixed, default: {} },
+    interviewQuestionQueue: [{ type: String }],
+    interviewRound: { type: Number, default: 0 },
   },
   { timestamps: true }
 );

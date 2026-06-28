@@ -1,14 +1,9 @@
 import { Lab } from '../models/Lab.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { haversineDistanceKm } from '../services/locationService.js';
+import { fetchNearbyHealthcareFromOverpass } from '../services/overpassService.js';
 
-function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 const INDIAN_CITIES = ['Mumbai', 'Delhi', 'Lucknow', 'Pune', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Ahmedabad', 'Jaipur', 'Bhopal', 'Indore'];
 
@@ -83,7 +78,7 @@ export const getLabs = asyncHandler(async (req, res) => {
   let enriched = labs.map((l) => {
     const obj = l.toObject ? l.toObject() : { ...l };
     if (l.location?.coordinates?.length === 2 && hasCoords) {
-      obj.distance = parseFloat(haversineDistance(userLat, userLng, l.location.coordinates[1], l.location.coordinates[0]).toFixed(1));
+      obj.distance = parseFloat(haversineDistanceKm(userLat, userLng, l.location.coordinates[1], l.location.coordinates[0]).toFixed(1));
     } else {
       obj.distance = null;
     }
@@ -92,6 +87,10 @@ export const getLabs = asyncHandler(async (req, res) => {
 
   if (hasCoords) {
     enriched = enriched.filter((l) => l.distance !== null && l.distance <= radiusKm);
+    const overpassLabs = await fetchNearbyHealthcareFromOverpass(userLat, userLng, 'laboratory', radiusKm * 1000);
+    const dbNames = new Set(enriched.map((l) => l.name?.toLowerCase()));
+    const uniqueOverpass = overpassLabs.filter((o) => !dbNames.has(o.name?.toLowerCase()));
+    enriched = [...enriched, ...uniqueOverpass];
   }
 
   if (minRating) {

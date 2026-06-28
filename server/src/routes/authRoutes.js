@@ -3,6 +3,7 @@ import * as authController from '../controllers/authController.js';
 import { protect } from '../middleware/auth.js';
 import { validate } from '../middleware/validate.js';
 import { registerSchema, loginSchema, forgotPasswordSchema, resetPasswordSchema } from '../validators/auth.validator.js';
+import { upload } from '../middleware/upload.js';
 
 const router = Router();
 
@@ -14,5 +15,6 @@ router.post('/reset-password', validate(resetPasswordSchema), authController.res
 router.post('/logout', protect, authController.logout);
 router.get('/me', protect, authController.getMe);
 router.patch('/password', protect, authController.updatePassword);
+router.patch('/avatar', protect, upload.single('avatar'), authController.updateAvatar);
 
 export default router;

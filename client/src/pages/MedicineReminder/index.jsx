@@ -60,6 +60,8 @@ export default function MedicineReminder() {
   const [showForm, setShowForm] = useState(false);
   const [searchParams] = useSearchParams();
   const prefillMedName = searchParams.get('medicineName');
+  const prefillDosage = searchParams.get('dosage');
+  const prefillFrequency = searchParams.get('frequency');
   const [editId, setEditId] = useState(null);
   const [form, setForm] = useState({
     medicineName: '', dosage: '', frequency: 'once_daily',
@@ -70,10 +72,16 @@ export default function MedicineReminder() {
 
   useEffect(() => {
     if (prefillMedName) {
-      setForm(prev => ({ ...prev, medicineName: prefillMedName }));
+      setForm(prev => ({
+        ...prev,
+        medicineName: prefillMedName,
+        dosage: prefillDosage || prev.dosage,
+        frequency: prefillFrequency || prev.frequency,
+        times: prefillFrequency ? getTimeDefaults(prefillFrequency) : prev.times
+      }));
       setShowForm(true);
     }
-  }, [prefillMedName]);
+  }, [prefillMedName, prefillDosage, prefillFrequency]);
 
   const { data: remindersRes, isLoading } = useQuery({
     queryKey: ['reminders'],

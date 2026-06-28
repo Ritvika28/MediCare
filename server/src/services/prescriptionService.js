@@ -1,5 +1,4 @@
 import PDFDocument from 'pdfkit';
-import { uploadFile } from './uploadService.js';
 
 export const generatePrescriptionPDF = async (prescription, doctor, patient, user) => {
   return new Promise((resolve, reject) => {
@@ -7,14 +6,9 @@ export const generatePrescriptionPDF = async (prescription, doctor, patient, use
     const chunks = [];
 
     doc.on('data', (chunk) => chunks.push(chunk));
-    doc.on('end', async () => {
-      try {
-        const buffer = Buffer.concat(chunks);
-        const url = await uploadFile(buffer, `prescription-${prescription._id}.pdf`, 'prescriptions');
-        resolve(url);
-      } catch (err) {
-        reject(err);
-      }
+    doc.on('end', () => {
+      const buffer = Buffer.concat(chunks);
+      resolve(buffer);
     });
     doc.on('error', reject);
 

@@ -1,5 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '@/api/axios';
 import { useAuth } from '@/context/AuthContext';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
@@ -11,7 +12,7 @@ import { Badge } from '@/components/ui/Badge';
 import { 
   FileText, Upload, Download, Search, Sparkles, Filter, 
   X, Calendar, Clipboard, HeartPulse, Activity, Pill, Beaker,
-  Trash2, Info, AlertCircle
+  Trash2, Info, AlertCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
@@ -20,10 +21,12 @@ export default function PatientRecords() {
   const fileRef = useRef();
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const navigate = useNavigate();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('all');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  const [expandedRecordId, setExpandedRecordId] = useState(null);
   
   const [recordToDelete, setRecordToDelete] = useState(null);
 
@@ -65,7 +68,10 @@ export default function PatientRecords() {
   const uploadMutation = useMutation({
     mutationFn: (formData) => api.post('/records/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['records']);
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['profile-records'] });
+      queryClient.invalidateQueries({ queryKey: ['health-analytics'] });
       toast('Medical record uploaded successfully!', 'success');
       closeModal();
     },
@@ -225,40 +231,130 @@ export default function PatientRecords() {
             filteredRecords.map((record) => {
               const IconComp = getRecordIcon(record.recordType);
               return (
-                <Card key={record._id} className="transition-all hover:shadow hover:border-teal-500/30 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl">
-                  <CardContent className="flex items-center justify-between p-5">
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/30 text-teal-600 flex items-center justify-center shrink-0">
-                        <IconComp className="h-5 w-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <p className="font-extrabold text-slate-800 dark:text-slate-200 text-sm truncate">{record.title}</p>
-                        <div className="flex items-center gap-2 mt-1">
-                          <Badge variant="outline" className={`text-[9px] py-0 px-1.5 font-bold uppercase tracking-wider ${getRecordTypeBadgeColor(record.recordType)}`}>
-                            {getRecordTypeLabel(record.recordType)}
-                          </Badge>
-                          <span className="text-[10px] text-slate-400 font-semibold">{formatDate(record.recordDate || record.createdAt)}</span>
+                <Card key={record._id} className="transition-all hover:shadow hover:border-teal-500/30 border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl flex flex-col justify-between">
+                  <CardContent className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="h-10 w-10 rounded-xl bg-teal-50 dark:bg-teal-950/30 text-teal-600 flex items-center justify-center shrink-0">
+                          <IconComp className="h-5 w-5" />
                         </div>
-                        {record.description && (
-                          <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5 truncate">{record.description}</p>
+                        <div className="min-w-0">
+                          <p className="font-extrabold text-slate-800 dark:text-slate-200 text-sm truncate">{record.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            <Badge variant="outline" className={`text-[9px] py-0 px-1.5 font-bold uppercase tracking-wider ${getRecordTypeBadgeColor(record.recordType)}`}>
+                              {getRecordTypeLabel(record.recordType)}
+                            </Badge>
+                            <span className="text-[10px] text-slate-400 font-semibold">{formatDate(record.recordDate || record.createdAt)}</span>
+                          </div>
+                          {record.description && (
+                            <p className="text-xs text-slate-400 dark:text-slate-500 mt-1.5 truncate">{record.description}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0 ml-3">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedRecordId(expandedRecordId === record._id ? null : record._id)}
+                          className="p-2 rounded-xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer"
+                          title="View AI Analysis"
+                        >
+                          {expandedRecordId === record._id ? <ChevronUp className="h-4.5 w-4.5" /> : <ChevronDown className="h-4.5 w-4.5" />}
+                        </button>
+                        <a href={record.fileUrl} target="_blank" rel="noreferrer">
+                          <Button variant="outline" size="sm" className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700 dark:border-slate-850 dark:hover:bg-slate-800 cursor-pointer">
+                            <Download className="h-4 w-4 text-teal-650" />
+                          </Button>
+                        </a>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => setRecordToDelete(record)}
+                          className="rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/20 cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+
+                    {/* AI Analysis Expanded Section */}
+                    {expandedRecordId === record._id && (
+                      <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4 animate-in fade-in duration-200">
+                        {record.aiSummary && (
+                          <div className="p-3.5 rounded-xl bg-teal-50/30 dark:bg-teal-950/10 border border-teal-100/50 dark:border-teal-950/30">
+                            <h4 className="text-xs font-black text-teal-800 dark:text-teal-400 flex items-center gap-1.5 uppercase tracking-wider mb-1.5">
+                              <Sparkles className="h-3.5 w-3.5" /> AI Diagnostic Summary
+                            </h4>
+                            <p className="text-xs font-semibold text-slate-705 dark:text-slate-300 leading-relaxed">
+                              {record.aiSummary}
+                            </p>
+                          </div>
+                        )}
+
+                        {record.medicalInsights?.abnormalValues?.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider block">⚠️ Abnormal/Out of Range Values</span>
+                            <div className="flex flex-wrap gap-1.5">
+                              {record.medicalInsights.abnormalValues.map((val, idx) => (
+                                <Badge key={idx} className="bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 text-[10px] font-bold py-1 px-2">
+                                  {val}
+                                </Badge>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {record.medicalInsights?.findings?.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Key Findings</span>
+                            <ul className="list-disc list-inside space-y-1">
+                              {record.medicalInsights.findings.map((f, idx) => (
+                                <li key={idx} className="text-xs font-semibold text-slate-700 dark:text-slate-350">{f}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {record.medicalInsights?.lifestyleAdvice?.length > 0 && (
+                          <div className="space-y-1.5">
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Lifestyle & Health Advice</span>
+                            <ul className="list-disc list-inside space-y-1">
+                              {record.medicalInsights.lifestyleAdvice.map((a, idx) => (
+                                <li key={idx} className="text-xs font-semibold text-slate-700 dark:text-slate-350">{a}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Prescription auto-reminder */}
+                        {record.recordType === 'prescription' && record.medicalInsights?.medicines?.length > 0 && (
+                          <div className="space-y-2">
+                            <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider block">Medicines & Actionable Reminders</span>
+                            <div className="space-y-2">
+                              {record.medicalInsights.medicines.map((med, idx) => (
+                                <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border dark:border-slate-850 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                                  <div className="space-y-1">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-xs font-bold text-slate-900 dark:text-white">💊 {med.name}</span>
+                                      <Badge variant="outline" className="text-[9px] font-bold">{med.dosage} ({med.frequency})</Badge>
+                                    </div>
+                                    <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">
+                                      <strong>Purpose</strong>: {med.purpose} · <strong>Side effects</strong>: {med.sideEffects}
+                                    </p>
+                                  </div>
+                                  <Button
+                                    size="sm"
+                                    onClick={() => navigate(`/patient/medicine-reminder?medicineName=${encodeURIComponent(med.name)}&dosage=${encodeURIComponent(med.dosage)}&frequency=${encodeURIComponent(med.frequency)}`)}
+                                    className="bg-teal-650 hover:bg-teal-700 text-white font-bold text-[10px] px-3 py-1.5 rounded-lg shrink-0 w-full sm:w-auto cursor-pointer"
+                                  >
+                                    ➕ Set Reminder
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
                         )}
                       </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0 ml-3">
-                      <a href={record.fileUrl} target="_blank" rel="noreferrer">
-                        <Button variant="outline" size="sm" className="rounded-xl border-slate-200 hover:bg-slate-50 text-slate-700 dark:border-slate-850 dark:hover:bg-slate-800">
-                          <Download className="h-4 w-4 text-teal-650" />
-                        </Button>
-                      </a>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => setRecordToDelete(record)}
-                        className="rounded-xl text-rose-500 hover:bg-rose-50 hover:text-rose-700 dark:hover:bg-rose-950/20"
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    )}
                   </CardContent>
                 </Card>
               );

@@ -2,14 +2,9 @@ import mongoose from 'mongoose';
 import { BloodBank } from '../models/BloodBank.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { haversineDistanceKm } from '../services/locationService.js';
+import { fetchNearbyHealthcareFromOverpass } from '../services/overpassService.js';
 
-function haversineDistance(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 const INDIAN_CITIES = ['Mumbai', 'Delhi', 'Lucknow', 'Pune', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Ahmedabad', 'Jaipur', 'Bhopal', 'Indore'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
@@ -89,7 +84,7 @@ export const getBloodBanks = asyncHandler(async (req, res) => {
   let enriched = bloodBanks.map((b) => {
     const obj = b.toObject ? b.toObject() : { ...b };
     if (b.location?.coordinates?.length === 2 && hasCoords) {
-      obj.distance = parseFloat(haversineDistance(userLat, userLng, b.location.coordinates[1], b.location.coordinates[0]).toFixed(1));
+      obj.distance = parseFloat(haversineDistanceKm(userLat, userLng, b.location.coordinates[1], b.location.coordinates[0]).toFixed(1));
     } else {
       obj.distance = null;
     }
@@ -98,7 +93,10 @@ export const getBloodBanks = asyncHandler(async (req, res) => {
 
   if (hasCoords) {
     enriched = enriched.filter((b) => b.distance !== null && b.distance <= radiusKm);
-    enriched.sort((a, b) => a.distance - b.distance);
+    const overpassBanks = await fetchNearbyHealthcareFromOverpass(userLat, userLng, 'blood_bank', radiusKm * 1000);
+    const dbNames = new Set(enriched.map((b) => b.name?.toLowerCase()));
+    const uniqueOverpass = overpassBanks.filter((o) => !dbNames.has(o.name?.toLowerCase()));
+    enriched = [...enriched, ...uniqueOverpass].sort((a, b) => a.distance - b.distance);
   } else {
     enriched.sort((a, b) => b.rating - a.rating);
   }

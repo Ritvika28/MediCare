@@ -5,10 +5,11 @@ import { BedAvailability } from '../models/BedAvailability.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { enrichHospitalsWithDistance } from '../services/locationService.js';
-import { reverseGeocode } from '../services/geocodeService.js';
-import { fetchNearbyHospitalsFromGoogle } from '../services/placesService.js';
+import { reverseGeocode, forwardGeocode } from '../services/geocodeService.js';
 import { fetchNearbyHospitalsFromOverpass } from '../services/overpassService.js';
 import { searchHospitals, buildHospitalSearchFilter } from '../services/hospitalSearchService.js';
+import { getRouteDirections } from '../services/openRouteService.js';
+
 
 export const getHospitals = asyncHandler(async (req, res) => {
   const { hospitals, total, page, limit, totalPages } = await searchHospitals({
@@ -57,33 +58,19 @@ export const getNearbyHospitals = asyncHandler(async (req, res) => {
 
   let results = [...networkHospitals];
 
-  const needsGoogle =
-    process.env.GOOGLE_MAPS_API_KEY &&
-    (networkHospitals.length === 0 || process.env.NEARBY_ALWAYS_INCLUDE_GOOGLE === 'true');
+  // Merge Overpass results (external OSM data) with database records
+  const overpassHospitals = await fetchNearbyHospitalsFromOverpass(
+    latitude,
+    longitude,
+    Math.min(maxDistance, 50000)
+  );
 
-  if (needsGoogle) {
-    const googleHospitals = await fetchNearbyHospitalsFromGoogle(
-      latitude,
-      longitude,
-      Math.min(maxDistance, 50000)
-    );
-    const networkNames = new Set(networkHospitals.map((h) => h.name?.toLowerCase()));
-    const uniqueGoogle = googleHospitals.filter(
-      (g) => !networkNames.has(g.name?.toLowerCase())
-    );
-    results = [...networkHospitals, ...uniqueGoogle].sort((a, b) => a.distance - b.distance);
-  } else if (networkHospitals.length === 0) {
-    const overpassHospitals = await fetchNearbyHospitalsFromOverpass(
-      latitude,
-      longitude,
-      Math.min(maxDistance, 50000)
-    );
-    const networkNames = new Set(networkHospitals.map((h) => h.name?.toLowerCase()));
-    const uniqueOverpass = overpassHospitals.filter(
-      (o) => !networkNames.has(o.name?.toLowerCase())
-    );
-    results = [...networkHospitals, ...uniqueOverpass].sort((a, b) => a.distance - b.distance);
-  }
+  const networkNames = new Set(networkHospitals.map((h) => h.name?.toLowerCase()));
+  const uniqueOverpass = overpassHospitals.filter(
+    (o) => !networkNames.has(o.name?.toLowerCase())
+  );
+  results = [...networkHospitals, ...uniqueOverpass].sort((a, b) => a.distance - b.distance);
+
 
   res.json({
     success: true,
@@ -216,3 +203,27 @@ export const manageRooms = asyncHandler(async (req, res) => {
 
   res.json({ success: true, data: hospital });
 });
+
+export const getRoute = asyncHandler(async (req, res) => {
+  const { startLat, startLng, endLat, endLng } = req.query;
+  if (!startLat || !startLng || !endLat || !endLng) {
+    throw new AppError('startLat, startLng, endLat, and endLng are required', 400);
+  }
+  const data = await getRouteDirections(startLat, startLng, endLat, endLng);
+  res.json({ success: true, data });
+});
+
+export const geocode = asyncHandler(async (req, res) => {
+  const { query } = req.query;
+  if (!query) throw new AppError('query is required', 400);
+  const data = await forwardGeocode(query);
+  res.json({ success: true, data });
+});
+
+export const reverseGeocodeRoute = asyncHandler(async (req, res) => {
+  const { lat, lng } = req.query;
+  if (!lat || !lng) throw new AppError('lat and lng are required', 400);
+  const data = await reverseGeocode(lat, lng);
+  res.json({ success: true, data });
+});
+

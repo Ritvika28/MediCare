@@ -67,8 +67,8 @@ export default function DoctorProfile() {
   const address = hospitalData?.address;
   const fullAddress = [address?.street, address?.city, address?.state, address?.pincode].filter(Boolean).join(', ');
   const mapsUrl = fullAddress
-    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(fullAddress)}`
-    : address?.city ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${hospitalData?.name} ${address.city}`)}` : null;
+    ? `https://www.openstreetmap.org/search?query=${encodeURIComponent(fullAddress)}`
+    : address?.city ? `https://www.openstreetmap.org/search?query=${encodeURIComponent(`${hospitalData?.name} ${address.city}`)}` : null;
 
   return (
     <div className="space-y-6">

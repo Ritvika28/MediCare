@@ -2,15 +2,8 @@ import { Hospital } from '../models/Hospital.js';
 import { Doctor } from '../models/Doctor.js';
 import { Lab } from '../models/Lab.js';
 import { BloodBank } from '../models/BloodBank.js';
+import { haversineDistanceKm } from './locationService.js';
 
-function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a = Math.sin(dLat / 2) ** 2
-    + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
 
 function summarize(items, lat, lng, nameField = 'name') {
   const withDistance = items
@@ -18,7 +11,7 @@ function summarize(items, lat, lng, nameField = 'name') {
       const coords = item.location?.coordinates;
       if (!coords || coords.length < 2) return null;
       const [lngC, latC] = coords;
-      const distance = parseFloat(haversineKm(lat, lng, latC, lngC).toFixed(1));
+      const distance = parseFloat(haversineDistanceKm(lat, lng, latC, lngC).toFixed(1));
       return { name: item[nameField] || item.user?.firstName, distance };
     })
     .filter(Boolean)
@@ -59,7 +52,7 @@ export async function getNearbyHealthcareSummary(latitude, longitude, radiusKm =
   const hospitalItems = hospitals.filter((h) => {
     const coords = h.location?.coordinates;
     if (!coords) return false;
-    const d = haversineKm(lat, lng, coords[1], coords[0]);
+    const d = haversineDistanceKm(lat, lng, coords[1], coords[0]);
     return d <= radiusKm;
   });
 
@@ -68,7 +61,7 @@ export async function getNearbyHealthcareSummary(latitude, longitude, radiusKm =
       const hospital = d.hospitalId || d.hospital;
       const coords = hospital?.location?.coordinates;
       if (!coords) return null;
-      const distance = haversineKm(lat, lng, coords[1], coords[0]);
+      const distance = haversineDistanceKm(lat, lng, coords[1], coords[0]);
       if (distance > radiusKm) return null;
       return {
         name: d.user ? `Dr. ${d.user.firstName} ${d.user.lastName}` : d.specialization,
@@ -81,13 +74,13 @@ export async function getNearbyHealthcareSummary(latitude, longitude, radiusKm =
   const labItems = labs.filter((l) => {
     const coords = l.location?.coordinates;
     if (!coords) return false;
-    return haversineKm(lat, lng, coords[1], coords[0]) <= radiusKm;
+    return haversineDistanceKm(lat, lng, coords[1], coords[0]) <= radiusKm;
   });
 
   const bankItems = bloodBanks.filter((b) => {
     const coords = b.location?.coordinates;
     if (!coords) return false;
-    return haversineKm(lat, lng, coords[1], coords[0]) <= radiusKm;
+    return haversineDistanceKm(lat, lng, coords[1], coords[0]) <= radiusKm;
   });
 
   const doctorSummary = doctorItems.length

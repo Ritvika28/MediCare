@@ -2,6 +2,8 @@ import mongoose from 'mongoose';
 import { Doctor } from '../models/Doctor.js';
 import { User } from '../models/User.js';
 import { Hospital } from '../models/Hospital.js';
+import { haversineDistanceKm } from './locationService.js';
+
 
 const SPECIALIZATION_ALIASES = {
   cardiologist: 'Cardiology',
@@ -177,14 +179,6 @@ export const searchDoctors = async (params) => {
   return { doctors, total };
 };
 
-function haversineKm(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = ((lat2 - lat1) * Math.PI) / 180;
-  const dLon = ((lon2 - lon1) * Math.PI) / 180;
-  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) ** 2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-}
-
 export const searchDoctorsNearby = async (params) => {
   const lat = parseFloat(params.latitude || params.lat);
   const lng = parseFloat(params.longitude || params.lng);
@@ -198,7 +192,7 @@ export const searchDoctorsNearby = async (params) => {
       const coords = hospital?.location?.coordinates || hospital?.address?.coordinates;
       if (!coords || coords.length < 2) return null;
       const [hLng, hLat] = coords;
-      const distance = haversineKm(lat, lng, hLat, hLng);
+      const distance = haversineDistanceKm(lat, lng, hLat, hLng);
       if (distance > radiusKm) return null;
       const doc = d.toObject ? d.toObject() : { ...d };
       doc.distance = parseFloat(distance.toFixed(1));

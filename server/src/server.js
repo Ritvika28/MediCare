@@ -1,4 +1,6 @@
+// Trigger restart
 import 'dotenv/config';
+console.log('GEMINI_API_KEY loaded:', process.env.GEMINI_API_KEY ? process.env.GEMINI_API_KEY.slice(0, 15) + '...' : 'undefined');
 import http from 'http';
 import { Server } from 'socket.io';
 import app from './app.js';

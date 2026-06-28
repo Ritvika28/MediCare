@@ -6,6 +6,7 @@ import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { generatePrescriptionPDF } from '../services/prescriptionService.js';
 import { createNotification } from '../services/notificationService.js';
+import { cloudinary } from '../config/cloudinary.js';
 
 export const createPrescription = asyncHandler(async (req, res) => {
   const doctor = await Doctor.findOne({ user: req.user._id });
@@ -21,9 +22,23 @@ export const createPrescription = asyncHandler(async (req, res) => {
     { path: 'doctor', populate: 'user' },
   ]);
 
-  const pdfUrl = await generatePrescriptionPDF(prescription, doctor, populated.patient, req.user);
-  if (pdfUrl) {
-    prescription.pdfUrl = pdfUrl;
+  const pdfBuffer = await generatePrescriptionPDF(prescription, doctor, populated.patient, req.user);
+  if (pdfBuffer) {
+    const uploadResult = await new Promise((resolve, reject) => {
+      const stream = cloudinary.uploader.upload_stream(
+        {
+          folder: 'prescriptions',
+          resource_type: 'auto',
+          public_id: `prescription-${prescription._id}`,
+        },
+        (error, result) => {
+          if (error) reject(new AppError(`Cloudinary upload failed: ${error.message}`, 500));
+          else resolve(result);
+        }
+      );
+      stream.end(pdfBuffer);
+    });
+    prescription.pdfUrl = uploadResult.secure_url;
     await prescription.save();
   }
 

@@ -18,7 +18,7 @@ export function HospitalCard({ hospital, showDistance = true }) {
 
   const directionsUrl =
     lat != null && lng != null
-      ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}`
+      ? `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=%3B${lat}%2C${lng}`
       : null;
 
   const hoursText = hospital.operatingHours || 'Open 24/7';

@@ -33,7 +33,6 @@
 3. Environment variables:
    - `VITE_API_URL=https://your-api.onrender.com/api`
    - `VITE_SOCKET_URL=https://your-api.onrender.com`
-   - `VITE_GOOGLE_MAPS_API_KEY`
 4. Deploy
 
 ## Post-Deployment

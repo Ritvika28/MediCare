@@ -68,7 +68,7 @@ export default function HospitalDetails() {
     ? hospital.acceptedInsurance 
     : ['Star Health Insurance', 'HDFC ERGO', 'Niva Bupa', 'ICICI Lombard', 'Care Health'];
 
-  const directionsUrl = lat && lng ? `https://www.google.com/maps/dir/?api=1&destination=${lat},${lng}` : '#';
+  const directionsUrl = lat && lng ? `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=%3B${lat}%2C${lng}` : '#';
 
   const getDoctorCountForDepartment = (deptId) => {
     return doctors?.filter(doc => 

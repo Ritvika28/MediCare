@@ -1,7 +1,7 @@
 import { Hospital } from '../models/Hospital.js';
 import { EmergencyRequest } from '../models/EmergencyRequest.js';
 import { Patient } from '../models/Patient.js';
-import { getGoogleMapsRouteUrl } from './locationService.js';
+import { getOpenStreetMapRouteUrl } from './locationService.js';
 import { createNotification } from './notificationService.js';
 import { generateSOSNotifications } from './notificationEngineService.js';
 import { User } from '../models/User.js';
@@ -31,7 +31,7 @@ export const findNearestEmergencyHospital = async (latitude, longitude) => {
   const [hLng, hLat] = nearest.location?.coordinates || [lng, lat];
   return {
     hospital: nearest,
-    routeUrl: getGoogleMapsRouteUrl(lat, lng, hLat, hLng),
+    routeUrl: getOpenStreetMapRouteUrl(lat, lng, hLat, hLng),
     phone: nearest.phone,
   };
 };

@@ -3,6 +3,7 @@ import { User } from '../models/User.js';
 import { Review } from '../models/Review.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { cloudinary, getPublicIdFromUrl } from '../config/cloudinary.js';
 import { APIFeatures } from '../utils/apiFeatures.js';
 import { searchDoctors, searchDoctorsNearby } from '../services/doctorSearchService.js';
 
@@ -49,12 +50,24 @@ export const updateDoctorProfile = asyncHandler(async (req, res) => {
   });
   await doctor.save();
 
-  if (req.body.firstName || req.body.lastName || req.body.phone || req.body.avatar) {
+  if (req.body.firstName || req.body.lastName || req.body.phone || req.body.avatar !== undefined) {
+    if (req.body.avatar !== undefined) {
+      const oldUser = await User.findById(req.user._id);
+      if (oldUser && oldUser.avatar && oldUser.avatar !== req.body.avatar) {
+        const oldPublicId = getPublicIdFromUrl(oldUser.avatar);
+        if (oldPublicId) {
+          await cloudinary.uploader.destroy(oldPublicId).catch((err) => {
+            console.error('Failed to delete old doctor avatar from Cloudinary:', err);
+          });
+        }
+      }
+    }
+
     await User.findByIdAndUpdate(req.user._id, {
       ...(req.body.firstName && { firstName: req.body.firstName }),
       ...(req.body.lastName && { lastName: req.body.lastName }),
       ...(req.body.phone && { phone: req.body.phone }),
-      ...(req.body.avatar && { avatar: req.body.avatar }),
+      ...(req.body.avatar !== undefined && { avatar: req.body.avatar }),
     });
   }
 

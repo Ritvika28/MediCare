@@ -20,8 +20,16 @@ const medicalRecordSchema = new mongoose.Schema(
     hospital: { type: String, default: '' },
     tags: [{ type: String }],
     detectedMedicines: [{ type: String }],
+    extractedText: { type: String, default: '' },
+    aiSummary: { type: String, default: '' },
+    medicalInsights: { type: mongoose.Schema.Types.Mixed, default: {} },
     isShared: { type: Boolean, default: false },
     sharedWith: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Doctor' }],
+    reportSubtype: { type: String, default: '' },
+    testValues: { type: mongoose.Schema.Types.Mixed, default: {} },
+    comparisonHistory: { type: mongoose.Schema.Types.Mixed, default: [] },
+    comparisonSummary: { type: String, default: '' },
+    comparisonInsights: { type: String, default: '' },
   },
   { timestamps: true }
 );

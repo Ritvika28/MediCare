@@ -91,9 +91,9 @@ export default function Emergency() {
 
   const shareLocation = () => {
     if (!hasLocation) { toast('Enable GPS first', 'error'); return; }
-    const text = `EMERGENCY: I need help. My location: https://maps.google.com/?q=${latitude},${longitude}`;
+    const text = `EMERGENCY: I need help. My location: https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=17/${latitude}/${longitude}`;
     if (navigator.share) {
-      navigator.share({ title: 'Emergency Location', text, url: `https://maps.google.com/?q=${latitude},${longitude}` });
+      navigator.share({ title: 'Emergency Location', text, url: `https://www.openstreetmap.org/?mlat=${latitude}&mlon=${longitude}#map=17/${latitude}/${longitude}` });
     } else {
       navigator.clipboard?.writeText(text);
       toast('Location link copied to clipboard', 'success');

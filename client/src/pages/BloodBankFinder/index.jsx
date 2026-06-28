@@ -238,7 +238,7 @@ export default function BloodBankFinder() {
                     </Badge>
                     {bank.location?.coordinates && (
                       <a
-                        href={`https://www.google.com/maps/dir/?api=1&destination=${bank.location.coordinates[1]},${bank.location.coordinates[0]}`}
+                        href={`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=%3B${bank.location.coordinates[1]}%2C${bank.location.coordinates[0]}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-teal-600 dark:text-teal-400 font-bold hover:underline flex items-center gap-1"

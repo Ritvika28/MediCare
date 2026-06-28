@@ -7,8 +7,12 @@ const router = Router();
 router.get('/', hospitalController.getHospitals);
 router.get('/nearby', hospitalController.getNearbyHospitals);
 router.get('/compare', hospitalController.compareHospitals);
+router.get('/route', hospitalController.getRoute);
+router.get('/geocode', hospitalController.geocode);
+router.get('/reverse-geocode', hospitalController.reverseGeocodeRoute);
 router.get('/:id', hospitalController.getHospital);
 router.get('/:id/doctors', hospitalController.getHospitalDoctors);
+
 
 router.use(protect, restrictTo('admin'));
 router.post('/', hospitalController.createHospital);

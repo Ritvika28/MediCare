@@ -7,6 +7,7 @@ import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { generateAccessToken, generateRefreshToken } from '../utils/generateTokens.js';
 import { sendPasswordResetEmail } from '../services/emailService.js';
+import { cloudinary, getPublicIdFromUrl } from '../config/cloudinary.js';
 
 const sendTokens = async (user, res) => {
   const accessToken = generateAccessToken(user._id, user.role);
@@ -153,3 +154,35 @@ export const updatePassword = asyncHandler(async (req, res) => {
   await user.save();
   res.json({ success: true, message: 'Password updated' });
 });
+
+export const updateAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) throw new AppError('File required', 400);
+
+  const uploadResult = await new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        folder: 'avatars',
+        resource_type: 'image',
+      },
+      (error, result) => {
+        if (error) reject(new AppError(`Cloudinary upload failed: ${error.message}`, 500));
+        else resolve(result);
+      }
+    );
+    stream.end(req.file.buffer);
+  });
+
+  const oldUser = await User.findById(req.user._id);
+  if (oldUser && oldUser.avatar) {
+    const oldPublicId = getPublicIdFromUrl(oldUser.avatar);
+    if (oldPublicId) {
+      await cloudinary.uploader.destroy(oldPublicId).catch((err) => {
+        console.error('Failed to delete old avatar from Cloudinary:', err);
+      });
+    }
+  }
+
+  const user = await User.findByIdAndUpdate(req.user._id, { avatar: uploadResult.secure_url }, { new: true });
+  res.json({ success: true, data: { avatar: user.avatar } });
+});
+

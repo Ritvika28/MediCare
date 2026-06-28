@@ -9,6 +9,7 @@ import { Lab } from '../models/Lab.js';
 import { BloodBank } from '../models/BloodBank.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
+import { cloudinary, getPublicIdFromUrl } from '../config/cloudinary.js';
 import { APIFeatures } from '../utils/apiFeatures.js';
 import { calculateHealthScore, getHealthAlerts } from '../services/healthScoreService.js';
 import { getHealthAnalytics, buildHealthTimeline } from '../services/healthAnalyticsService.js';
@@ -27,7 +28,20 @@ export const updateProfile = asyncHandler(async (req, res) => {
 
   const userFields = ['firstName', 'lastName', 'phone', 'avatar'];
   const userUpdate = {};
-  userFields.forEach((f) => { if (req.body[f]) userUpdate[f] = req.body[f]; });
+  userFields.forEach((f) => { if (req.body[f] !== undefined) userUpdate[f] = req.body[f]; });
+  
+  if (req.body.avatar !== undefined) {
+    const oldUser = await User.findById(req.user._id);
+    if (oldUser && oldUser.avatar && oldUser.avatar !== req.body.avatar) {
+      const oldPublicId = getPublicIdFromUrl(oldUser.avatar);
+      if (oldPublicId) {
+        await cloudinary.uploader.destroy(oldPublicId).catch((err) => {
+          console.error('Failed to delete old patient avatar from Cloudinary:', err);
+        });
+      }
+    }
+  }
+
   if (Object.keys(userUpdate).length) {
     await User.findByIdAndUpdate(req.user._id, userUpdate);
   }

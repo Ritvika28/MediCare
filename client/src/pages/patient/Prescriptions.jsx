@@ -11,7 +11,8 @@ import { useToast } from '@/components/ui/Toast';
 import { 
   FileText, Upload, Download, Search, Sparkles, Filter, 
   X, Calendar, Clipboard, HeartPulse, Activity, Pill, Beaker,
-  Trash2, ShieldCheck, CreditCard, Award, Eye, Clock, Info, Check
+  Trash2, ShieldCheck, CreditCard, Award, Eye, Clock, Info, Check,
+  ChevronDown, ChevronUp
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
@@ -27,9 +28,9 @@ export default function PatientPrescriptions() {
   const [searchQuery, setSearchQuery] = useState('');
   const [sortOption, setSortOption] = useState('newest');
   const [layoutMode, setLayoutMode] = useState('grid'); // 'grid' or 'timeline'
-  
   const [showUploadModal, setShowUploadModal] = useState(false);
   const [selectedFile, setSelectedFile] = useState(null);
+  const [expandedRecordId, setExpandedRecordId] = useState(null);
   
   // OCR states
   const [ocrStatus, setOcrStatus] = useState('idle'); // 'idle', 'scanning', 'complete'
@@ -67,7 +68,10 @@ export default function PatientPrescriptions() {
   const uploadMutation = useMutation({
     mutationFn: (fd) => api.post('/records/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
     onSuccess: () => {
-      queryClient.invalidateQueries(['records']);
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['profile-records'] });
+      queryClient.invalidateQueries({ queryKey: ['health-analytics'] });
       toast('Document uploaded to Prescription Vault!', 'success');
       closeModal();
     },
@@ -79,7 +83,10 @@ export default function PatientPrescriptions() {
   const deleteMutation = useMutation({
     mutationFn: (id) => api.delete(`/records/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries(['records']);
+      queryClient.invalidateQueries({ queryKey: ['records'] });
+      queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
+      queryClient.invalidateQueries({ queryKey: ['profile-records'] });
+      queryClient.invalidateQueries({ queryKey: ['health-analytics'] });
     },
   });
 
@@ -482,11 +489,78 @@ export default function PatientPrescriptions() {
                             ))}
                           </div>
                         )}
+
+                        {/* AI Analysis Expanded Section */}
+                        {expandedRecordId === doc._id && (
+                          <div className="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 space-y-4 animate-in fade-in duration-200 text-left">
+                            {doc.aiSummary && (
+                              <div className="p-3.5 rounded-xl bg-rose-50/30 dark:bg-rose-950/10 border border-rose-100/50 dark:border-rose-950/30">
+                                <h4 className="text-xs font-black text-rose-800 dark:text-rose-455 flex items-center gap-1.5 uppercase tracking-wider mb-1.5">
+                                  <Sparkles className="h-3.5 w-3.5" /> AI Clinical Summary
+                                </h4>
+                                <p className="text-xs font-semibold text-slate-700 dark:text-slate-300 leading-relaxed">
+                                  {doc.aiSummary}
+                                </p>
+                              </div>
+                            )}
+
+                            {doc.medicalInsights?.abnormalValues?.length > 0 && (
+                              <div className="space-y-1.5">
+                                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider block">⚠️ Abnormal Values Detected</span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {doc.medicalInsights.abnormalValues.map((val, idx) => (
+                                    <Badge key={idx} className="bg-rose-50 text-rose-700 border border-rose-200 dark:bg-rose-950/30 dark:text-rose-400 text-[10px] font-bold py-1 px-2">
+                                      {val}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            {doc.medicalInsights?.medicines?.length > 0 && (
+                              <div className="space-y-2">
+                                <span className="text-[10px] font-bold text-rose-500 uppercase tracking-wider block">Detailed Dosage Instructions</span>
+                                <div className="space-y-2">
+                                  {doc.medicalInsights.medicines.map((med, idx) => (
+                                    <div key={idx} className="p-3 bg-slate-50 dark:bg-slate-950 rounded-xl border dark:border-slate-850 flex flex-col gap-2">
+                                      <div className="flex items-center justify-between gap-1.5">
+                                        <span className="text-xs font-bold text-slate-900 dark:text-white">💊 {med.name}</span>
+                                        <Button
+                                          size="sm"
+                                          onClick={() => navigate(`/patient/medicine-reminder?medicineName=${encodeURIComponent(med.name)}&dosage=${encodeURIComponent(med.dosage)}&frequency=${encodeURIComponent(med.frequency)}`)}
+                                          className="bg-rose-600 hover:bg-rose-700 text-white font-bold text-[9px] px-2.5 py-1 rounded-lg shrink-0 cursor-pointer"
+                                        >
+                                          ➕ Set Reminder
+                                        </Button>
+                                      </div>
+                                      <p className="text-[11px] text-slate-500 font-semibold leading-relaxed">
+                                        <strong>Dosage</strong>: {med.dosage} ({med.frequency}) · <strong>Purpose</strong>: {med.purpose}
+                                      </p>
+                                      {med.sideEffects && (
+                                        <p className="text-[10px] text-slate-400 font-semibold">
+                                          ⚠️ <strong>Side effects</strong>: {med.sideEffects} · <strong>Precautions</strong>: {med.precautions}
+                                        </p>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </CardContent>
 
                       <div className="p-4 pt-0 border-t border-slate-100 dark:border-slate-850 flex gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setExpandedRecordId(expandedRecordId === doc._id ? null : doc._id)}
+                          className="px-3 py-1.5 border border-slate-200 dark:border-slate-800 hover:border-rose-400 hover:bg-rose-50/10 rounded-xl text-xs font-bold text-slate-500 hover:text-rose-600 transition flex items-center gap-1.5 cursor-pointer"
+                        >
+                          {expandedRecordId === doc._id ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                          AI Insights
+                        </button>
                         <a href={doc.fileUrl} target="_blank" rel="noreferrer" className="flex-1">
-                          <Button variant="outline" size="sm" className="w-full text-xs font-bold gap-1.5 rounded-xl">
+                          <Button variant="outline" size="sm" className="w-full text-xs font-bold gap-1.5 rounded-xl cursor-pointer">
                             <Eye className="h-4.5 w-4.5" /> View / Download
                           </Button>
                         </a>
@@ -494,7 +568,7 @@ export default function PatientPrescriptions() {
                           variant="ghost" 
                           size="sm" 
                           onClick={() => handleDeleteRequest(doc)}
-                          className="rounded-xl text-rose-500 hover:bg-rose-50"
+                          className="rounded-xl text-rose-500 hover:bg-rose-50 cursor-pointer"
                         >
                           <Trash2 className="h-4.5 w-4.5" />
                         </Button>
