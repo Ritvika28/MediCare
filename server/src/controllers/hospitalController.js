@@ -9,80 +9,117 @@ import { reverseGeocode, forwardGeocode } from '../services/geocodeService.js';
 import { fetchNearbyHospitalsFromOverpass } from '../services/overpassService.js';
 import { searchHospitals, buildHospitalSearchFilter } from '../services/hospitalSearchService.js';
 import { getRouteDirections } from '../services/openRouteService.js';
-
+import { unifiedSearchHealthcare } from '../services/searchEngineService.js';
 
 export const getHospitals = asyncHandler(async (req, res) => {
-  const { hospitals, total, page, limit, totalPages } = await searchHospitals({
-    search: req.query.search,
-    city: req.query.city,
-    state: req.query.state,
-    facilities: req.query.facilities,
-    lat: req.query.lat ?? req.query.latitude,
-    lng: req.query.lng ?? req.query.longitude,
-    sortBy: req.query.sortBy || req.query.sort,
-    page: req.query.page,
-    limit: req.query.limit,
-    maxDistanceMeters: req.query.maxDistance ? parseInt(req.query.maxDistance, 10) : (req.query.radius ? parseInt(req.query.radius, 10) * 1000 : undefined),
-  });
+  const {
+    search,
+    query,
+    city,
+    lat,
+    latitude,
+    lng,
+    longitude,
+    radius,
+    maxDistance,
+    facilities,
+    rating,
+    verified,
+    emergency,
+    specialty,
+    page = 1,
+    limit = 20
+  } = req.query;
+
+  const searchQueryStr = search || query || '';
+  const searchLat = lat || latitude;
+  const searchLng = lng || longitude;
+  const searchRadiusKm = radius ? parseFloat(radius) : (maxDistance ? parseFloat(maxDistance) / 1000 : 10);
+
+  const results = await unifiedSearchHealthcare({
+    query: searchQueryStr,
+    latitude: parseFloat(searchLat),
+    longitude: parseFloat(searchLng),
+    radius: searchRadiusKm,
+    city: city !== 'All' ? city : undefined,
+    entityType: 'hospital',
+    filters: {
+      facilities,
+      rating,
+      verified: verified === 'true' || verified === true,
+      emergency: emergency === 'true' || emergency === true,
+      specialty
+    }
+  }, req.user?._id);
+
+  const total = results.results.length;
+  const p = parseInt(page, 10) || 1;
+  const l = parseInt(limit, 10) || 20;
+  const start = (p - 1) * l;
+  const paginatedData = results.results.slice(start, start + l);
 
   res.json({
     success: true,
-    data: hospitals,
+    data: paginatedData,
     total,
-    page,
-    limit,
-    totalPages,
+    page: p,
+    limit: l,
+    totalPages: Math.ceil(total / l) || 1,
+    userLocation: {
+      latitude: results.latitude,
+      longitude: results.longitude,
+      city: results.city
+    }
   });
 });
 
 export const getNearbyHospitals = asyncHandler(async (req, res) => {
-  const latitude = parseFloat(req.query.latitude ?? req.query.lat);
-  const longitude = parseFloat(req.query.longitude ?? req.query.lng);
-  const maxDistance = parseInt(req.query.maxDistance, 10) || 50000;
-
-  if (Number.isNaN(latitude) || Number.isNaN(longitude)) {
-    throw new AppError('latitude and longitude query parameters are required', 400);
-  }
-
-  const userLocation = await reverseGeocode(latitude, longitude);
-
-  const filter = await buildHospitalSearchFilter({
-    search: req.query.search,
-    city: req.query.city,
-    state: req.query.state,
-    facilities: req.query.facilities,
-  });
-
-  const allInDb = await Hospital.find(filter).populate('departments');
-  let networkHospitals = enrichHospitalsWithDistance(allInDb, latitude, longitude, maxDistance);
-
-  let results = [...networkHospitals];
-
-  // Merge Overpass results (external OSM data) with database records
-  const overpassHospitals = await fetchNearbyHospitalsFromOverpass(
+  const {
+    search,
+    query,
+    city,
+    lat,
     latitude,
+    lng,
     longitude,
-    Math.min(maxDistance, 50000)
-  );
+    radius,
+    maxDistance,
+    facilities,
+    rating,
+    verified,
+    emergency,
+    specialty
+  } = req.query;
 
-  const networkNames = new Set(networkHospitals.map((h) => h.name?.toLowerCase()));
-  const uniqueOverpass = overpassHospitals.filter(
-    (o) => !networkNames.has(o.name?.toLowerCase())
-  );
-  results = [...networkHospitals, ...uniqueOverpass].sort((a, b) => a.distance - b.distance);
+  const searchQueryStr = search || query || '';
+  const searchLat = lat || latitude;
+  const searchLng = lng || longitude;
+  const searchRadiusKm = radius ? parseFloat(radius) : (maxDistance ? parseFloat(maxDistance) / 1000 : 10);
 
+  const results = await unifiedSearchHealthcare({
+    query: searchQueryStr,
+    latitude: parseFloat(searchLat),
+    longitude: parseFloat(searchLng),
+    radius: searchRadiusKm,
+    city: city !== 'All' ? city : undefined,
+    entityType: 'hospital',
+    filters: {
+      facilities,
+      rating,
+      verified: verified === 'true' || verified === true,
+      emergency: emergency === 'true' || emergency === true,
+      specialty
+    }
+  }, req.user?._id);
 
   res.json({
     success: true,
     userLocation: {
-      latitude,
-      longitude,
-      city: userLocation?.city || '',
-      state: userLocation?.state || '',
-      country: userLocation?.country || '',
-      displayName: userLocation?.displayName || '',
+      latitude: results.latitude,
+      longitude: results.longitude,
+      city: results.city,
     },
-    data: results,
+    data: results.results,
   });
 });
 

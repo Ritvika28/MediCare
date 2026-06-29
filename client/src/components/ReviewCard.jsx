@@ -57,14 +57,6 @@ export function ReviewCard({ review }) {
           "{review.comment || 'No description provided.'}"
         </p>
 
-        {/* Consultation Mode tag */}
-        {review.appointment?.type && (
-          <div className="flex items-center gap-2 pt-1">
-            <Badge variant="secondary" className="text-[9px] bg-slate-50 dark:bg-slate-850 text-slate-500 border border-slate-200/50 dark:border-slate-800 uppercase font-bold tracking-wider">
-              {review.appointment.type} Visit
-            </Badge>
-          </div>
-        )}
       </CardContent>
     </Card>
   );

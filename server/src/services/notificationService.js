@@ -14,20 +14,3 @@ export const createNotification = async ({ userId, type, title, message, data, l
   });
 };
 
-export const notifyAppointmentUpdate = async (userId, appointment, status) => {
-  const titles = {
-    confirmed: 'Appointment Confirmed',
-    rejected: 'Appointment Rejected',
-    cancelled: 'Appointment Cancelled',
-    completed: 'Appointment Completed',
-  };
-  return createNotification({
-    userId,
-    type: 'system',
-    title: titles[status] || 'Appointment Update',
-    message: `Your appointment on ${new Date(appointment.scheduledAt).toLocaleDateString()} has been ${status}.`,
-    data: { appointmentId: appointment._id },
-    actionLink: '/patient/appointments',
-    priority: 'medium',
-  });
-};

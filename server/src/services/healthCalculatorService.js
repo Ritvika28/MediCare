@@ -266,7 +266,7 @@ export function calcBloodPressure(systolic, diastolic) {
   } else if (systolic >= 140 || diastolic >= 90) {
     classification = 'Stage 2 Hypertension';
     interpretation = 'Blood pressure is in Stage 2 Hypertension range.';
-    recs.push('Reduce sodium intake to under 2300mg/day.', 'Exercise 30 minutes most days.', 'Limit alcohol and manage stress.', 'Schedule appointment with physician within 1 week.');
+    recs.push('Reduce sodium intake to under 2300mg/day.', 'Exercise 30 minutes most days.', 'Limit alcohol and manage stress.', 'Consult with a physician or clinic within 1 week.');
     doctorRecommended = true;
   } else if (systolic >= 130 || diastolic >= 80) {
     classification = 'Stage 1 Hypertension';

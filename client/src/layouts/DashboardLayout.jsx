@@ -35,10 +35,8 @@ const navByRole = {
   ],
   doctor: [
     { to: '/doctor', icon: LayoutDashboard, label: 'Overview' },
-    { to: '/doctor/appointments', icon: Calendar, label: 'Appointments' },
     { to: '/doctor/queue', icon: Users, label: 'Queue' },
     { to: '/doctor/patients', icon: Users, label: 'Patients' },
-    { to: '/doctor/schedule', icon: Activity, label: 'Schedule' },
     { to: '/doctor/profile', icon: User, label: 'Profile' },
   ],
   admin: [

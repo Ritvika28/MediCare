@@ -25,7 +25,6 @@ export const createReview = asyncHandler(async (req, res) => {
   const review = await Review.create({
     patient: patient._id,
     doctor: req.body.doctorId,
-    appointment: req.body.appointmentId,
     rating: req.body.rating,
     comment: req.body.comment,
   });

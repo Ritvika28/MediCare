@@ -62,11 +62,6 @@ doctorSchema.pre('save', function (next) {
   next();
 });
 
-doctorSchema.virtual('appointments', {
-  ref: 'Appointment',
-  localField: '_id',
-  foreignField: 'doctor',
-});
 
 doctorSchema.virtual('firstName').get(function () {
   return this.user?.firstName || '';

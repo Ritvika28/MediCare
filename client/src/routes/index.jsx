@@ -18,7 +18,6 @@ import HospitalDetails from '@/pages/Hospitals/HospitalDetails';
 import DepartmentDoctors from '@/pages/patient/DepartmentDoctors';
 import DoctorProfile from '@/pages/Doctors/DoctorProfile';
 import CompareHospitals from '@/pages/patient/CompareHospitals';
-import PatientAppointments from '@/pages/patient/Appointments';
 import PatientRecords from '@/pages/patient/Records';
 import PatientPrescriptions from '@/pages/patient/Prescriptions';
 import AIAssistant from '@/pages/patient/AIAssistant';
@@ -38,9 +37,7 @@ import NearbyLabs from '@/pages/NearbyLabs';
 import EmergencyHub from '@/pages/EmergencyHub';
 
 import DoctorOverview from '@/pages/doctor/Overview';
-import DoctorAppointments from '@/pages/doctor/Appointments';
 import DoctorPatients from '@/pages/doctor/Patients';
-import DoctorSchedule from '@/pages/doctor/Schedule';
 import DoctorSelfProfile from '@/pages/doctor/Profile';
 import QueueManagement from '@/pages/doctor/QueueManagement';
 
@@ -77,7 +74,6 @@ export function AppRoutes() {
           <Route path="hospitals/:hospitalId/doctors/:doctorId" element={<DoctorProfile />} />
           <Route path="doctors/:doctorId" element={<DoctorProfile />} />
           <Route path="compare" element={<CompareHospitals />} />
-          <Route path="appointments" element={<PatientAppointments />} />
           <Route path="records" element={<PatientRecords />} />
           <Route path="prescriptions" element={<PatientPrescriptions />} />
           <Route path="ai-assistant" element={<AIAssistant />} />
@@ -99,10 +95,8 @@ export function AppRoutes() {
       <Route element={<ProtectedRoute allowedRoles={['doctor']} />}>
         <Route path="doctor" element={<DashboardLayout role="doctor" />}>
           <Route index element={<DoctorOverview />} />
-          <Route path="appointments" element={<DoctorAppointments />} />
           <Route path="queue" element={<QueueManagement />} />
           <Route path="patients" element={<DoctorPatients />} />
-          <Route path="schedule" element={<DoctorSchedule />} />
           <Route path="profile" element={<DoctorSelfProfile />} />
           <Route path="notifications" element={<PatientNotifications />} />
         </Route>

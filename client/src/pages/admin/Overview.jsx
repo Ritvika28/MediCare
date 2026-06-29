@@ -1,63 +1,46 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/api/axios';
 import { StatCard } from '@/components/shared/StatCard';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { Stethoscope, Users, Calendar, DollarSign } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-
-const COLORS = ['#0d9488', '#3b82f6', '#f59e0b', '#ef4444', '#8b5cf6'];
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
+import { Stethoscope, Users, Activity, BarChart3 } from 'lucide-react';
 
 export default function AdminOverview() {
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: ['admin-dashboard'],
     queryFn: () => api.get('/analytics/admin/dashboard').then((r) => r.data.data),
   });
 
-  const chartData = data?.monthlyAppointments?.map((m) => ({
-    name: `${m._id.month}/${m._id.year}`,
-    count: m.count,
-  })) || [];
-
-  const pieData = data?.appointmentStats?.map((s) => ({ name: s._id, value: s.count })) || [];
-
   return (
-    <div>
-      <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-      <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <StatCard title="Doctors" value={data?.totals?.doctors || 0} icon={Stethoscope} color="teal" />
-        <StatCard title="Patients" value={data?.totals?.patients || 0} icon={Users} color="blue" />
-        <StatCard title="Appointments" value={data?.totals?.appointments || 0} icon={Calendar} color="purple" />
-        <StatCard title="Revenue" value={`$${data?.estimatedRevenue || 0}`} icon={DollarSign} color="orange" />
+    <div className="space-y-6">
+      <div className="relative rounded-3xl bg-gradient-to-br from-slate-900 via-teal-950 to-slate-900 p-6 md:p-8 text-white shadow-xl overflow-hidden border border-slate-800">
+        <div className="relative z-10 space-y-1.5">
+          <p className="text-teal-350 text-xs font-bold uppercase tracking-widest">Management Hub</p>
+          <h1 className="text-2xl md:text-3xl font-black tracking-tight">Admin Overview Dashboard</h1>
+          <p className="text-slate-400 text-sm max-w-md">System statistics, user registries, and medical facilities metrics.</p>
+        </div>
       </div>
-      <div className="mt-8 grid gap-6 lg:grid-cols-2">
-        <Card>
-          <CardHeader><CardTitle>Monthly Appointments</CardTitle></CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" />
-                <YAxis />
-                <Tooltip />
-                <Bar dataKey="count" fill="#0d9488" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle>Appointment Status</CardTitle></CardHeader>
-          <CardContent className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <PieChart>
-                <Pie data={pieData} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80} label>
-                  {pieData.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                </Pie>
-                <Tooltip />
-              </PieChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
+
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-2">
+        <StatCard title="Total Registered Doctors" value={data?.totals?.doctors || 0} icon={Stethoscope} color="teal" />
+        <StatCard title="Total Active Patients" value={data?.totals?.patients || 0} icon={Users} color="blue" />
       </div>
+
+      <Card className="border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 rounded-2xl shadow-sm">
+        <CardHeader>
+          <CardTitle className="text-base font-extrabold flex items-center gap-2">
+            <BarChart3 className="h-5 w-5 text-teal-600" /> Platform Insights
+          </CardTitle>
+          <CardDescription>Visual metrics and logs from the system</CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-950 border border-slate-100 dark:border-slate-850">
+            <p className="text-xs font-bold text-slate-500 mb-1">SYSTEM ACTIVITY STATUS</p>
+            <p className="text-sm font-semibold text-slate-655 dark:text-slate-350">
+              The platform services are fully operational. Use the navigation panel to manage hospitals, beds, emergencies, departments, and registered users.
+            </p>
+          </div>
+        </CardContent>
+      </Card>
     </div>
   );
 }

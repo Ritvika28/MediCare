@@ -1,20 +1,22 @@
 import { useEffect, useRef, useState } from 'react';
+import { Maximize2, Crosshair } from 'lucide-react';
 
 /**
  * Reusable generic LeafletMap component.
  * Supports:
  * - Current Location marker
- * - Multiple categories (Hospitals, Labs, Blood Banks, Doctors)
- * - Custom medical HTML/SVG icons
+ * - Multiple categories (Hospitals, Labs, Blood Banks, Doctors, Pharmacies)
+ * - Custom medical HTML/SVG icons with pop/growth animations
  * - Marker clustering
  * - Beautiful popup cards with directions
  * - Responsive layout & dark mode tiles
+ * - Locate Me & Fullscreen floating controls
  */
 export function LeafletMap({ 
   userLat, 
   userLng, 
   items = [], 
-  category = 'hospital', // 'hospital' | 'lab' | 'blood_bank' | 'doctor' | 'all'
+  category = 'hospital', // 'hospital' | 'lab' | 'blood_bank' | 'doctor' | 'pharmacy' | 'all'
   height = '350px' 
 }) {
   const mapRef = useRef(null);
@@ -52,7 +54,7 @@ export function LeafletMap({
       mapInstanceRef.current = L.map(mapRef.current, {
         zoomControl: true,
         scrollWheelZoom: true,
-      }).setView([userLat || 20.5937, userLng || 78.9629], 13); // Default to India center if no coords
+      }).setView([userLat || 20.5937, userLng || 78.9629], 13);
 
       // Layer group for clusters
       if (L.markerClusterGroup) {
@@ -126,7 +128,7 @@ export function LeafletMap({
       let svgContent = '';
 
       if (type === 'hospital') {
-        colorClass = 'bg-teal-600';
+        colorClass = 'bg-teal-650';
         svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
         </svg>`;
@@ -140,20 +142,28 @@ export function LeafletMap({
           <path d="M12 4H8a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2h-4Z"/>
         </svg>`;
       } else if (type === 'blood_bank' || type === 'bloodbank') {
-        colorClass = 'bg-red-600';
+        colorClass = 'bg-rose-600';
         svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-11-7-11S5 10.7 5 15a7 7 0 0 0 7 7Z"/>
         </svg>`;
       } else if (type === 'doctor') {
-        colorClass = 'bg-indigo-600';
+        colorClass = 'bg-indigo-650';
         svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4.8 2.8A3 3 0 1 1 9 7L6.5 9.5a3.5 3.5 0 0 0 0 5L9 17a3 3 0 1 1-4.2 4.2L2.3 18.7a3.5 3.5 0 0 1 0-5L4.8 11.2a3 3 0 1 1 0-8.4Z"/>
-          <path d="M19.2 2.8A3 3 0 1 0 15 7l2.5 2.5a3.5 3.5 0 0 1 0 5L15 17a3 3 0 1 0 4.2 4.2l2.5-2.5a3.5 3.5 0 0 0 0-5l-2.5-2.5a3 3 0 1 0 0-8.4Z"/>
+          <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <path d="M22 21v-2a4 4 0 0 0-3-3.87"/>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"/>
+        </svg>`;
+      } else if (type === 'pharmacy') {
+        colorClass = 'bg-emerald-600';
+        svgContent = `<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="m10.5 20.5 10-10a4.95 4.95 0 1 0-7-7l-10 10a4.95 4.95 0 1 0 7 7Z"/>
+          <path d="m8.5 8.5 7 7"/>
         </svg>`;
       }
 
       return L.divIcon({
-        html: `<div class="flex items-center justify-center h-8 w-8 rounded-full ${colorClass} border-2 border-white shadow-lg text-white">
+        html: `<div class="flex items-center justify-center h-8 w-8 rounded-full ${colorClass} border border-white shadow-lg text-white transform hover:scale-115 transition duration-150">
           ${svgContent}
         </div>`,
         className: `custom-medical-marker-${type}`,
@@ -171,12 +181,14 @@ export function LeafletMap({
         // Determine item category/type
         let itemType = category;
         if (category === 'all') {
-          if (item._id?.startsWith('overpass_laboratory_') || item.testsAvailable) {
+          if (item._id?.startsWith('overpass_laboratory_') || item.testsAvailable || item.type === 'lab') {
             itemType = 'lab';
-          } else if (item._id?.startsWith('overpass_blood_bank_') || item.bloodGroups) {
+          } else if (item._id?.startsWith('overpass_blood_bank_') || item.bloodGroups || item.type === 'blood_bank') {
             itemType = 'blood_bank';
-          } else if (item.specialization) {
+          } else if (item.specialization || item.type === 'doctor') {
             itemType = 'doctor';
+          } else if (item._id?.startsWith('overpass_pharmacy_') || item.type === 'pharmacy') {
+            itemType = 'pharmacy';
           } else {
             itemType = 'hospital';
           }
@@ -187,29 +199,29 @@ export function LeafletMap({
                           !String(item._id).startsWith('overpass_');
 
         let popupHtml = `
-          <div class="p-2.5 min-w-[210px] text-slate-800 dark:text-slate-100">
-            <h4 class="font-extrabold text-sm text-slate-900 dark:text-white leading-tight">${item.name}</h4>
-            <p class="text-xs text-slate-500 dark:text-slate-400 mt-1 font-semibold">${item.address?.street || item.address || ''}</p>
+          <div class="p-3 min-w-[220px] text-slate-800 dark:text-slate-100">
+            <h4 class="font-black text-sm text-slate-900 dark:text-white leading-snug">${item.name}</h4>
+            <p class="text-[11px] text-slate-500 dark:text-slate-400 mt-1 font-semibold">${item.address?.street || item.address || ''}</p>
         `;
 
-        if (item.distanceText) {
-          popupHtml += `<p class="text-xs font-bold text-teal-650 mt-1.5">🚗 ${item.distanceText}</p>`;
+        if (item.distanceText || item.distanceKm) {
+          const dist = item.distanceText || `${item.distanceKm} km`;
+          popupHtml += `<p class="text-[11px] font-extrabold text-teal-650 mt-2 flex items-center gap-1">🚗 ${dist}</p>`;
         }
 
-        popupHtml += `<div class="mt-2.5 flex gap-1.5">`;
+        popupHtml += `<div class="mt-3 flex gap-2">`;
 
-        // Action links
+        // Direct profile link or external directions mapper
         if (isNetwork) {
           const viewUrl = itemType === 'doctor' 
             ? `/patient/doctors/${item._id}` 
             : `/patient/hospitals/${item._id}`;
-          popupHtml += `<a href="${viewUrl}" class="inline-block bg-teal-600 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg hover:bg-teal-700 transition shadow-sm">View Profile</a>`;
-        } else {
-          const destCoords = `${lat},${lng}`;
-          const originCoords = userLat && userLng ? `&origin=${userLat},${userLng}` : '';
-          const mapsUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${userLat || ''}%2C${userLng || ''}%3B${lat}%2C${lng}`;
-          popupHtml += `<a href="${mapsUrl}" target="_blank" rel="noreferrer" class="inline-block bg-slate-800 text-white text-xs font-bold px-2.5 py-1.5 rounded-lg hover:bg-slate-900 transition shadow-sm">Get Directions</a>`;
+          popupHtml += `<a href="${viewUrl}" class="inline-block bg-teal-650 hover:bg-teal-700 text-white text-[10px] font-extrabold px-3 py-2 rounded-xl transition shadow-sm">Profile</a>`;
         }
+        
+        const destCoords = `${lat},${lng}`;
+        const mapsUrl = `https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${userLat || ''}%2C${userLng || ''}%3B${lat}%2C${lng}`;
+        popupHtml += `<a href="${mapsUrl}" target="_blank" rel="noreferrer" class="inline-block bg-slate-855 hover:bg-black text-white text-[10px] font-extrabold px-3 py-2 rounded-xl transition shadow-sm">Directions</a>`;
 
         popupHtml += `</div></div>`;
 
@@ -236,11 +248,55 @@ export function LeafletMap({
     }
   }, [userLat, userLng, items, category]);
 
+  const handleLocateMe = () => {
+    if (userLat && userLng && mapInstanceRef.current) {
+      mapInstanceRef.current.setView([userLat, userLng], 15, { animate: true, duration: 1 });
+    }
+  };
+
+  const handleFullscreen = () => {
+    const mapContainer = mapRef.current?.parentNode;
+    if (!mapContainer) return;
+    if (!document.fullscreenElement) {
+      mapContainer.requestFullscreen?.().catch(err => console.error('Fullscreen request failed:', err));
+    } else {
+      document.exitFullscreen?.();
+    }
+  };
+
   return (
     <div 
-      className="relative w-full rounded-2xl overflow-hidden shadow-md border border-slate-200 dark:border-slate-800 z-0 mb-6"
+      className="relative w-full rounded-3xl overflow-hidden shadow-xl border border-slate-200/80 dark:border-slate-800 z-0 mb-6 bg-slate-50 group"
       style={{ height }}
     >
+      <style>{`
+        .custom-medical-marker-hospital, .custom-medical-marker-lab, .custom-medical-marker-blood_bank, .custom-medical-marker-doctor, .custom-medical-marker-pharmacy {
+          transition: transform 0.25s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        .custom-medical-marker-hospital:hover, .custom-medical-marker-lab:hover, .custom-medical-marker-blood_bank:hover, .custom-medical-marker-doctor:hover, .custom-medical-marker-pharmacy:hover {
+          transform: scale(1.22) !important;
+          z-index: 1000 !important;
+        }
+      `}</style>
+
+      {/* Floating View Map Controls (Locate Me & Fullscreen) */}
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+        <button 
+          onClick={handleLocateMe}
+          title="Locate my position"
+          className="p-2.5 rounded-xl bg-white/95 dark:bg-slate-900/95 text-slate-700 dark:text-slate-200 shadow-md border border-slate-200/50 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer active:scale-95"
+        >
+          <Crosshair className="h-4.5 w-4.5" />
+        </button>
+        <button 
+          onClick={handleFullscreen}
+          title="Fullscreen Map View"
+          className="p-2.5 rounded-xl bg-white/95 dark:bg-slate-900/95 text-slate-700 dark:text-slate-200 shadow-md border border-slate-200/50 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800 transition cursor-pointer active:scale-95"
+        >
+          <Maximize2 className="h-4.5 w-4.5" />
+        </button>
+      </div>
+
       <div ref={mapRef} className="w-full h-full" />
     </div>
   );

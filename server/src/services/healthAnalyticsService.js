@@ -1,7 +1,6 @@
 import { HealthCalculatorHistory } from '../models/HealthCalculatorHistory.js';
 import { HealthMetric } from '../models/HealthMetric.js';
 import { HealthAssessment } from '../models/HealthAssessment.js';
-import { Appointment } from '../models/Appointment.js';
 import { MedicalRecord } from '../models/MedicalRecord.js';
 import { Prescription } from '../models/Prescription.js';
 import { calculateHealthScore } from './healthScoreService.js';
@@ -267,12 +266,9 @@ export function buildSummaryCards(history) {
 }
 
 export async function buildHealthTimeline(patientId, limit = 50) {
-  const [calcHistory, assessments, appointments, records, prescriptions] = await Promise.all([
+  const [calcHistory, assessments, records, prescriptions] = await Promise.all([
     HealthCalculatorHistory.find({ patient: patientId }).sort('-createdAt').limit(limit),
     HealthAssessment.find({ patient: patientId }).sort('-createdAt').limit(10),
-    Appointment.find({ patient: patientId }).sort('-scheduledAt').limit(10)
-      .populate({ path: 'doctor', populate: { path: 'user', select: 'firstName lastName' } })
-      .populate('hospital', 'name'),
     MedicalRecord.find({ patient: patientId }).sort('-recordDate').limit(10),
     Prescription.find({ patient: patientId }).sort('-createdAt').limit(10)
       .populate({ path: 'doctor', populate: { path: 'user', select: 'firstName lastName' } }),
@@ -300,17 +296,6 @@ export async function buildHealthTimeline(patientId, limit = 50) {
       subtitle: `Health Score: ${a.healthScore}/100 · Risk: ${a.riskScore}%`,
       date: a.createdAt,
       status: a.riskScore < 30 ? 'low' : a.riskScore < 70 ? 'moderate' : 'high',
-    });
-  });
-
-  appointments.forEach((a) => {
-    timeline.push({
-      id: `apt-${a._id}`,
-      type: 'appointment',
-      title: `Appointment with Dr. ${a.doctor?.user?.firstName || ''} ${a.doctor?.user?.lastName || ''}`,
-      subtitle: a.hospital?.name || 'Hospital visit',
-      date: a.scheduledAt,
-      status: a.status,
     });
   });
 

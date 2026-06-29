@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import authRoutes from './authRoutes.js';
 import doctorRoutes from './doctorRoutes.js';
-import appointmentRoutes from './appointmentRoutes.js';
 import patientRoutes from './patientRoutes.js';
 import recordRoutes from './recordRoutes.js';
 import prescriptionRoutes from './prescriptionRoutes.js';
@@ -23,12 +22,14 @@ import labRoutes from './labRoutes.js';
 import assessmentRoutes from './assessmentRoutes.js';
 import calculatorRoutes from './calculatorRoutes.js';
 import mlRoutes from './mlRoutes.js';
+import searchRoutes from './searchRoutes.js';
 
 const router = Router();
 
+router.use('/search', searchRoutes);
+
 router.use('/auth', authRoutes);
 router.use('/doctors', doctorRoutes);
-router.use('/appointments', appointmentRoutes);
 router.use('/schedules', scheduleRoutes);
 router.use('/patients', patientRoutes);
 router.use('/records', recordRoutes);

@@ -175,7 +175,7 @@ export function HospitalCard({ hospital, showDistance = true }) {
             )}
           </div>
 
-          {/* Details / Booking Action */}
+          {/* Details / Call Action */}
           {isNetwork ? (
             <Link to={`/patient/hospitals/${hospital._id}`} className="block w-full">
               <Button className="w-full bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs py-2 rounded-xl shadow-md transition-all" size="sm">

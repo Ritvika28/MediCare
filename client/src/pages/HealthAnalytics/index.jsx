@@ -33,7 +33,7 @@ const TREND_TABS = [
 ];
 
 const TYPE_COLORS = {
-  calculator: 'bg-teal-500', appointment: 'bg-emerald-500', assessment: 'bg-indigo-500',
+  calculator: 'bg-teal-500', assessment: 'bg-indigo-500',
   prescription: 'bg-violet-500', medical_record: 'bg-rose-500',
 };
 

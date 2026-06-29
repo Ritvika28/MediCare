@@ -102,10 +102,10 @@ export default function NearbyHospitals() {
             <Sparkles className="h-3.5 w-3.5" /> Discovery Engine
           </div>
           <h1 className="text-3xl md:text-4xl font-black tracking-tight leading-tight">
-            Find and Book the Best Care
+            Find the Best Healthcare Providers
           </h1>
           <p className="text-teal-100/90 text-sm md:text-base leading-relaxed">
-            Search hospitals, specialized departments, and top-tier doctors in real-time. Book video consultations or in-clinic visits instantly.
+            Search hospitals, specialized departments, and top-tier doctors in real-time. Connect with healthcare centers instantly.
           </p>
         </div>
       </div>

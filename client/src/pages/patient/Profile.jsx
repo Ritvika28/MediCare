@@ -159,11 +159,8 @@ export default function PatientProfile() {
 
   const removeAllergy = (a) => setAllergies(prev => prev.filter(x => x !== a));
 
-  const { data: appointmentsData, isLoading: appointmentsLoading } = useQuery({
-    queryKey: ['profile-appointments'],
-    queryFn: () => api.get('/appointments').then((r) => r.data.data || []),
-  });
-  const appointments = appointmentsData || [];
+  const appointments = [];
+  const appointmentsLoading = false;
 
   const { data: prescriptionsData, isLoading: prescriptionsLoading } = useQuery({
     queryKey: ['profile-prescriptions'],
@@ -205,18 +202,7 @@ export default function PatientProfile() {
   useEffect(() => {
     const list = [];
 
-    appointments.forEach((apt) => {
-      list.push({
-        id: `apt_${apt._id}`,
-        date: new Date(apt.scheduledAt || apt.appointmentDate),
-        type: 'appointment',
-        title: `Appointment with Dr. ${apt.doctor?.user?.firstName || ''} ${apt.doctor?.user?.lastName || ''}`.trim() || 'Medical Appointment',
-        subtitle: `${apt.doctor?.specialization || 'General Practitioner'} · ${apt.hospital?.name || 'Medicare Center'}`,
-        badge: apt.status,
-        badgeVariant: apt.status === 'confirmed' || apt.status === 'completed' ? 'success' : 'secondary',
-        icon: Calendar,
-      });
-    });
+    // Appointments timeline elements removed
 
     prescriptions.forEach((pres) => {
       list.push({
@@ -375,9 +361,8 @@ export default function PatientProfile() {
       </motion.div>
 
       {/* Stats Counter Bar */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
-          { label: 'Past Appointments', count: appointments.length, icon: Calendar, color: 'text-teal-600 bg-teal-50 dark:bg-teal-950/20' },
           { label: 'Active Prescriptions', count: prescriptions.length, icon: Pill, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/20' },
           { label: 'Medical Records', count: records.length, icon: FileText, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20' },
         ].map((stat, i) => (
@@ -591,7 +576,7 @@ export default function PatientProfile() {
               <CardTitle className="text-base flex items-center gap-2 font-black">
                 <FileHeart className="h-5 w-5 text-teal-600" /> Personal Health Timeline
               </CardTitle>
-              <CardDescription>Your complete medical history — appointments, prescriptions, records, and health assessments</CardDescription>
+              <CardDescription>Your complete medical history — prescriptions, records, and health assessments</CardDescription>
             </CardHeader>
             <CardContent className="pt-4">
               {timelineLoading ? (

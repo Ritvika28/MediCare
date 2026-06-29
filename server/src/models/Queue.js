@@ -5,7 +5,6 @@ const queueSchema = new mongoose.Schema(
     doctorId: { type: mongoose.Schema.Types.ObjectId, ref: 'Doctor', required: true, unique: true },
     appointments: [
       {
-        appointmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Appointment' },
         patientId: { type: mongoose.Schema.Types.ObjectId, ref: 'Patient' },
         position: Number,
         estimatedWait: Number,

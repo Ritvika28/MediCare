@@ -6,19 +6,53 @@ import { asyncHandler } from '../utils/asyncHandler.js';
 import { cloudinary, getPublicIdFromUrl } from '../config/cloudinary.js';
 import { APIFeatures } from '../utils/apiFeatures.js';
 import { searchDoctors, searchDoctorsNearby } from '../services/doctorSearchService.js';
+import { unifiedSearchHealthcare } from '../services/searchEngineService.js';
 
 export const getDoctors = asyncHandler(async (req, res) => {
-  const hasCoords = req.query.latitude || req.query.lat;
-  const { doctors, total } = hasCoords
-    ? await searchDoctorsNearby(req.query)
-    : await searchDoctors(req.query);
+  const {
+    search,
+    query,
+    city,
+    lat,
+    latitude,
+    lng,
+    longitude,
+    radius = 50,
+    page = 1,
+    limit = 10,
+    specialty,
+    gender
+  } = req.query;
+
+  const searchQueryStr = search || query || '';
+  const searchLat = lat || latitude;
+  const searchLng = lng || longitude;
+
+  const results = await unifiedSearchHealthcare({
+    query: searchQueryStr,
+    latitude: parseFloat(searchLat),
+    longitude: parseFloat(searchLng),
+    radius: parseFloat(radius),
+    city: city !== 'All' ? city : undefined,
+    entityType: 'doctor',
+    filters: {
+      specialty,
+      gender
+    }
+  }, req.user?._id);
+
+  const total = results.results.length;
+  const p = parseInt(page, 10) || 1;
+  const l = parseInt(limit, 10) || 10;
+  const start = (p - 1) * l;
+  const paginatedData = results.results.slice(start, start + l);
 
   res.json({
     success: true,
-    data: doctors,
+    data: paginatedData,
     pagination: {
-      page: parseInt(req.query.page, 10) || 1,
-      limit: parseInt(req.query.limit, 10) || 10,
+      page: p,
+      limit: l,
       total,
     },
   });

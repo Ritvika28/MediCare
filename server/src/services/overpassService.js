@@ -76,7 +76,13 @@ const mapOverpassToHealthcare = (element, userLat, userLng, category) => {
   return commonData;
 };
 
-export const fetchNearbyHealthcareFromOverpass = async (latitude, longitude, category, radiusMeters = 10000) => {
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://overpass.nchc.org.tw/api/interpreter'
+];
+
+export const fetchNearbyHealthcareFromOverpass = async (latitude, longitude, category, radiusMeters = 10000, facility = null) => {
   const lat = parseFloat(latitude);
   const lng = parseFloat(longitude);
   const radius = parseInt(radiusMeters, 10);
@@ -86,7 +92,7 @@ export const fetchNearbyHealthcareFromOverpass = async (latitude, longitude, cat
   }
 
   // Generate cache key with 3 decimal place precision for coords
-  const cacheKey = `overpass:${category}:${roundCoordinate(lat, 3)},${roundCoordinate(lng, 3)}:${radius}`;
+  const cacheKey = `overpass:${category}:${facility || 'none'}:${roundCoordinate(lat, 3)},${roundCoordinate(lng, 3)}:${radius}`;
 
   try {
     const cached = await GeoCache.findOne({ key: cacheKey, type: 'overpass' });
@@ -101,11 +107,74 @@ export const fetchNearbyHealthcareFromOverpass = async (latitude, longitude, cat
   // Construct Overpass API Query
   let osmQueryType = '';
   if (category === 'hospital') {
-    osmQueryType = `
-      node["amenity"="hospital"](around:${radius},${lat},${lng});
-      way["amenity"="hospital"](around:${radius},${lat},${lng});
-      relation["amenity"="hospital"](around:${radius},${lat},${lng});
-    `;
+    if (facility) {
+      const fac = facility.toLowerCase();
+      let extraFilters = [];
+      if (fac === 'emergency') {
+        extraFilters = [
+          'node["amenity"="hospital"]["emergency"="yes"]',
+          'node["amenity"="hospital"]["name"~"Emergency|Trauma|Accident|Casualty",i]',
+          'way["amenity"="hospital"]["emergency"="yes"]',
+          'way["amenity"="hospital"]["name"~"Emergency|Trauma|Accident|Casualty",i]',
+          'relation["amenity"="hospital"]["emergency"="yes"]',
+          'relation["amenity"="hospital"]["name"~"Emergency|Trauma|Accident|Casualty",i]'
+        ];
+      } else if (fac === 'icu') {
+        extraFilters = [
+          'node["amenity"="hospital"]["icu"="yes"]',
+          'node["amenity"="hospital"]["name"~"ICU|Intensive Care",i]',
+          'way["amenity"="hospital"]["icu"="yes"]',
+          'way["amenity"="hospital"]["name"~"ICU|Intensive Care",i]'
+        ];
+      } else if (fac === 'nicu') {
+        extraFilters = [
+          'node["amenity"="hospital"]["nicu"="yes"]',
+          'node["amenity"="hospital"]["name"~"NICU|Neonatal",i]',
+          'way["amenity"="hospital"]["nicu"="yes"]',
+          'way["amenity"="hospital"]["name"~"NICU|Neonatal",i]'
+        ];
+      } else if (fac === 'mri') {
+        extraFilters = [
+          'node["amenity"="hospital"]["mri"="yes"]',
+          'node["amenity"="hospital"]["name"~"MRI|Scan|Imaging",i]',
+          'way["amenity"="hospital"]["mri"="yes"]',
+          'way["amenity"="hospital"]["name"~"MRI|Scan|Imaging",i]'
+        ];
+      } else if (fac === 'ctscan' || fac === 'ct') {
+        extraFilters = [
+          'node["amenity"="hospital"]["ct"="yes"]',
+          'node["amenity"="hospital"]["name"~"CT|Scan|Imaging",i]',
+          'way["amenity"="hospital"]["ct"="yes"]',
+          'way["amenity"="hospital"]["name"~"CT|Scan|Imaging",i]'
+        ];
+      } else if (fac === 'ambulance') {
+        extraFilters = [
+          'node["amenity"="hospital"]["ambulance"="yes"]',
+          'node["amenity"="hospital"]["name"~"Ambulance|Rescue",i]',
+          'way["amenity"="hospital"]["ambulance"="yes"]',
+          'way["amenity"="hospital"]["name"~"Ambulance|Rescue",i]'
+        ];
+      } else if (fac === 'bloodbank' || fac === 'blood_bank') {
+        extraFilters = [
+          'node["amenity"="hospital"]["blood_bank"="yes"]',
+          'node["amenity"="hospital"]["name"~"Blood",i]',
+          'way["amenity"="hospital"]["blood_bank"="yes"]',
+          'way["amenity"="hospital"]["name"~"Blood",i]'
+        ];
+      } else {
+        extraFilters = [
+          `node["amenity"="hospital"]["name"~"${facility}",i]`,
+          `way["amenity"="hospital"]["name"~"${facility}",i]`
+        ];
+      }
+      osmQueryType = extraFilters.map(filter => `${filter}(around:${radius},${lat},${lng});`).join('\n');
+    } else {
+      osmQueryType = `
+        node["amenity"="hospital"](around:${radius},${lat},${lng});
+        way["amenity"="hospital"](around:${radius},${lat},${lng});
+        relation["amenity"="hospital"](around:${radius},${lat},${lng});
+      `;
+    }
   } else if (category === 'lab' || category === 'laboratory') {
     osmQueryType = `
       node["amenity"="laboratory"](around:${radius},${lat},${lng});
@@ -147,51 +216,65 @@ export const fetchNearbyHealthcareFromOverpass = async (latitude, longitude, cat
     out center;
   `;
 
-  const url = `https://overpass-api.de/api/interpreter?data=${encodeURIComponent(query)}`;
+  let elements = [];
+  let fetchError = null;
 
-  try {
-    console.log(`[Overpass] Fetching ${category} near`, lat, lng, 'within radius', radius);
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'MediCare-Hospital-App/1.0',
-      },
-    });
-
-    if (!res.ok) {
-      console.error('[Overpass] HTTP error:', res.status, res.statusText);
-      return [];
-    }
-
-    const data = await res.json();
-    const elements = data.elements || [];
-    console.log(`[Overpass] Found raw elements for ${category}:`, elements.length);
-
-    // Map and filter elements that have a name
-    const results = elements
-      .filter((el) => el.tags && el.tags.name)
-      .map((el) => mapOverpassToHealthcare(el, lat, lng, category))
-      .sort((a, b) => a.distance - b.distance);
-
-    console.log(`[Overpass] Mapped valid ${category} results:`, results.length);
-
-    // Cache the result in MongoDB for 2 hours (OSM results change slowly)
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    const url = `${endpoint}?data=${encodeURIComponent(query)}`;
     try {
-      const expireAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
-      await GeoCache.findOneAndUpdate(
-        { key: cacheKey, type: 'overpass' },
-        { data: results, expireAt },
-        { upsert: true, new: true }
-      );
-      console.log(`[Overpass] Cached results for key: ${cacheKey}`);
-    } catch (cacheErr) {
-      console.error('[Overpass] Cache write error:', cacheErr.message);
-    }
+      console.log(`[Overpass] Fetching ${category} near ${lat}, ${lng} from ${endpoint}`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 12000); // 12 seconds timeout
 
-    return results;
-  } catch (err) {
-    console.error('[Overpass] Error fetching from Overpass API:', err.message);
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'MediCare-Hospital-App/1.0' },
+        signal: controller.signal
+      });
+      clearTimeout(timeoutId);
+
+      if (res.ok) {
+        const data = await res.json();
+        elements = data.elements || [];
+        fetchError = null;
+        console.log(`[Overpass] Successfully fetched ${elements.length} elements from ${endpoint}`);
+        break;
+      } else {
+        console.warn(`[Overpass] Endpoint ${endpoint} returned error status: ${res.status}`);
+        fetchError = new Error(`HTTP ${res.status}`);
+      }
+    } catch (err) {
+      console.warn(`[Overpass] Failed to query ${endpoint}:`, err.message);
+      fetchError = err;
+    }
+  }
+
+  if (fetchError && elements.length === 0) {
+    console.error('[Overpass] All Overpass API endpoints failed. Returning empty.');
     return [];
   }
+
+  // Map and filter elements that have a name
+  const results = elements
+    .filter((el) => el.tags && el.tags.name)
+    .map((el) => mapOverpassToHealthcare(el, lat, lng, category))
+    .sort((a, b) => a.distance - b.distance);
+
+  console.log(`[Overpass] Mapped valid ${category} results:`, results.length);
+
+  // Cache the result in MongoDB for 2 hours (OSM results change slowly)
+  try {
+    const expireAt = new Date(Date.now() + 2 * 60 * 60 * 1000); // 2 hours
+    await GeoCache.findOneAndUpdate(
+      { key: cacheKey, type: 'overpass' },
+      { data: results, expireAt },
+      { upsert: true, new: true }
+    );
+    console.log(`[Overpass] Cached results for key: ${cacheKey}`);
+  } catch (cacheErr) {
+    console.error('[Overpass] Cache write error:', cacheErr.message);
+  }
+
+  return results;
 };
 
 // Maintain compatibility with existing code

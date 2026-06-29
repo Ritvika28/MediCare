@@ -18,7 +18,7 @@ export default function HealthScore() {
         <CardContent className="space-y-2 text-sm text-slate-600">
           <p>• Base score from your profile completeness</p>
           <p>• Adjusted for medical history and allergies</p>
-          <p>• Bonus for completed appointments and records</p>
+          <p>• Bonus for completed medical history records</p>
           <p>• Emergency contact on file improves score</p>
         </CardContent>
       </Card>

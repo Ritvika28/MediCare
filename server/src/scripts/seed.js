@@ -33,7 +33,7 @@ const seed = async () => {
 
   const collections = [
     'users', 'patients', 'doctors', 'departments', 'hospitals', 'bedavailabilities', 'schedules',
-    'reminders', 'bloodbanks', 'labs', 'healthassessments', 'healthcalculatorhistories', 'appointments',
+    'reminders', 'bloodbanks', 'labs', 'healthassessments', 'healthcalculatorhistories',
   ];
   for (const name of collections) {
     try {

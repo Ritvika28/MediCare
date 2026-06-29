@@ -43,14 +43,3 @@ export const sendPasswordResetEmail = async (user, resetUrl) => {
   });
 };
 
-export const sendAppointmentReminder = async (user, appointment) => {
-  await sendEmail({
-    to: user.email,
-    subject: 'Appointment Reminder',
-    html: `
-      <h2>Appointment Reminder</h2>
-      <p>Hi ${user.firstName},</p>
-      <p>Your appointment is scheduled for ${new Date(appointment.scheduledAt).toLocaleString()}.</p>
-    `,
-  });
-};

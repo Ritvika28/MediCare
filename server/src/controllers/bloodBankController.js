@@ -4,12 +4,13 @@ import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { haversineDistanceKm } from '../services/locationService.js';
 import { fetchNearbyHealthcareFromOverpass } from '../services/overpassService.js';
+import { unifiedSearchHealthcare } from '../services/searchEngineService.js';
 
 
 const INDIAN_CITIES = ['Mumbai', 'Delhi', 'Lucknow', 'Pune', 'Bangalore', 'Hyderabad', 'Chennai', 'Kolkata', 'Ahmedabad', 'Jaipur', 'Bhopal', 'Indore'];
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-async function buildBloodBankSearchFilter(query) {
+export async function buildBloodBankSearchFilter(query) {
   const { search, city, state, bloodGroup, hospital: hospitalName } = query;
   const filter = {};
   const orConditions = [];
@@ -70,38 +71,42 @@ async function enrichWithHospitalSearch(bloodBanks, hospitalName) {
 }
 
 export const getBloodBanks = asyncHandler(async (req, res) => {
-  const { lat, lng, limit = 50, radius = 50 } = req.query;
-  const { filter, hospitalName } = await buildBloodBankSearchFilter(req.query);
+  const {
+    search,
+    query,
+    city,
+    lat,
+    latitude,
+    lng,
+    longitude,
+    radius = 50,
+    limit = 50,
+    rating,
+    verified
+  } = req.query;
 
-  let bloodBanks = await BloodBank.find(filter).populate('hospital', 'name');
-  bloodBanks = await enrichWithHospitalSearch(bloodBanks, hospitalName);
+  const searchQueryStr = search || query || '';
+  const searchLat = lat || latitude;
+  const searchLng = lng || longitude;
 
-  const userLat = parseFloat(lat);
-  const userLng = parseFloat(lng);
-  const hasCoords = !Number.isNaN(userLat) && !Number.isNaN(userLng);
-  const radiusKm = parseFloat(radius) || 50;
-
-  let enriched = bloodBanks.map((b) => {
-    const obj = b.toObject ? b.toObject() : { ...b };
-    if (b.location?.coordinates?.length === 2 && hasCoords) {
-      obj.distance = parseFloat(haversineDistanceKm(userLat, userLng, b.location.coordinates[1], b.location.coordinates[0]).toFixed(1));
-    } else {
-      obj.distance = null;
+  const results = await unifiedSearchHealthcare({
+    query: searchQueryStr,
+    latitude: parseFloat(searchLat),
+    longitude: parseFloat(searchLng),
+    radius: parseFloat(radius),
+    city: city !== 'All' ? city : undefined,
+    entityType: 'blood_bank',
+    filters: {
+      rating: rating ? parseFloat(rating) : undefined,
+      verified: verified === 'true' || verified === true
     }
-    return obj;
+  }, req.user?._id);
+
+  res.json({
+    success: true,
+    count: results.results.length,
+    data: results.results.slice(0, parseInt(limit))
   });
-
-  if (hasCoords) {
-    enriched = enriched.filter((b) => b.distance !== null && b.distance <= radiusKm);
-    const overpassBanks = await fetchNearbyHealthcareFromOverpass(userLat, userLng, 'blood_bank', radiusKm * 1000);
-    const dbNames = new Set(enriched.map((b) => b.name?.toLowerCase()));
-    const uniqueOverpass = overpassBanks.filter((o) => !dbNames.has(o.name?.toLowerCase()));
-    enriched = [...enriched, ...uniqueOverpass].sort((a, b) => a.distance - b.distance);
-  } else {
-    enriched.sort((a, b) => b.rating - a.rating);
-  }
-
-  res.json({ success: true, count: enriched.length, data: enriched.slice(0, parseInt(limit)) });
 });
 
 export const getNearbyBloodBanks = asyncHandler(async (req, res) => {

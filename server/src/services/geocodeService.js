@@ -66,6 +66,33 @@ export const reverseGeocode = async (latitude, longitude) => {
 /**
  * Forward Geocode: Address/City/State String -> Coordinates and location details
  */
+const delay = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+async function callNominatim(q) {
+  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&addressdetails=1&limit=5&countrycodes=in`;
+  let attempts = 0;
+  while (attempts < 3) {
+    try {
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'MediCare-Hospital-App/1.0' },
+      });
+      if (res.status === 429) {
+        console.log('[Geocode] Nominatim rate limited (429). Retrying after 1.5 seconds...');
+        await delay(1500);
+        attempts++;
+        continue;
+      }
+      if (!res.ok) return [];
+      return await res.json();
+    } catch (err) {
+      console.error(`[Geocode] Nominatim fetch error:`, err.message);
+      await delay(1000);
+      attempts++;
+    }
+  }
+  return [];
+}
+
 export const forwardGeocode = async (queryStr) => {
   const query = (queryStr || '').trim();
   if (!query) return [];
@@ -83,17 +110,27 @@ export const forwardGeocode = async (queryStr) => {
   }
 
   try {
-    const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(query)}&format=json&addressdetails=1&limit=5`;
     console.log('[Geocode] Calling Nominatim forward geocode for query:', query);
-    
-    const res = await fetch(url, {
-      headers: { 'User-Agent': 'MediCare-Hospital-App/1.0' },
-    });
+    let elements = await callNominatim(query);
 
-    if (!res.ok) return [];
+    // Fallback 1: Query + ", India"
+    if ((!elements || elements.length === 0) && !query.toLowerCase().includes('india')) {
+      const fallbackQuery1 = `${query}, India`;
+      console.log(`[Geocode] Exact query "${query}" failed. Trying fallback: "${fallbackQuery1}"`);
+      elements = await callNominatim(fallbackQuery1);
+    }
 
-    const elements = await res.json();
-    
+    // Fallback 2: If query has multiple terms, try geocoding the last term + ", India" (usually the city)
+    if (!elements || elements.length === 0) {
+      const parts = query.split(/\s+/);
+      if (parts.length > 1) {
+        const lastWord = parts[parts.length - 1];
+        const fallbackQuery2 = `${lastWord}, India`;
+        console.log(`[Geocode] Exact query "${query}" failed. Trying fallback: "${fallbackQuery2}"`);
+        elements = await callNominatim(fallbackQuery2);
+      }
+    }
+
     const results = elements.map((item) => {
       const addr = item.address || {};
       return {
@@ -103,6 +140,8 @@ export const forwardGeocode = async (queryStr) => {
         city: addr.city || addr.town || addr.village || addr.suburb || addr.county || addr.state_district || '',
         state: addr.state || '',
         country: addr.country || '',
+        class: item.class || '',
+        type: item.type || '',
       };
     });
 
@@ -120,7 +159,7 @@ export const forwardGeocode = async (queryStr) => {
 
     return results;
   } catch (err) {
-    console.error('[Geocode] Forward geocode failed:', err.message);
+    console.error('[Geocode] Geocoding failed:', err.message);
     return [];
   }
 };

@@ -286,7 +286,7 @@ export default function HospitalDetails() {
                         👨‍⚕️ {count} Practitioner{count !== 1 ? 's' : ''}
                       </span>
                       <Button variant="ghost" size="sm" className="text-teal-600 hover:text-teal-700 font-bold p-0 text-xs flex items-center gap-0.5 bg-transparent hover:bg-transparent">
-                        Book →
+                        View Doctors →
                       </Button>
                     </div>
                   </div>
