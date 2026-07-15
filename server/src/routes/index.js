@@ -38,6 +38,7 @@ router.use('/reviews', reviewRoutes);
 router.use('/notifications', notificationRoutes);
 router.use('/chat', chatRoutes);
 router.use('/ai', aiRoutes);
+router.use('/v1/ai', aiRoutes);
 router.use('/analytics', analyticsRoutes);
 router.use('/departments', departmentRoutes);
 router.use('/hospitals', hospitalRoutes);

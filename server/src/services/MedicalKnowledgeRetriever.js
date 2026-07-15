@@ -1,6 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 import { MedicalRecord } from '../models/MedicalRecord.js';
 import { Patient } from '../models/Patient.js';
+import { callGeminiWithRetry } from './aiService.js';
+import { logAIRequest } from '../utils/aiLogger.js';
 
 let geminiClient;
 const getGeminiClient = () => {
@@ -82,12 +84,22 @@ ${contextBlock}
 
 User Question: "${queryText}"`;
 
-    const response = await client.models.generateContent({
+    const startTime = Date.now();
+    const response = await callGeminiWithRetry(() => client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         temperature: 0.1
       }
+    }));
+
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      userId,
+      endpoint: '/report-qna',
+      geminiRequest: { model: 'gemini-2.5-flash', query: queryText },
+      geminiResponseTime: duration,
+      status: 'success'
     });
 
     return {
@@ -100,6 +112,14 @@ User Question: "${queryText}"`;
       }))
     };
   } catch (err) {
+    await logAIRequest({
+      userId,
+      endpoint: '/report-qna',
+      geminiRequest: { model: 'gemini-2.5-flash', query: queryText },
+      geminiResponseTime: 0,
+      status: 'failed',
+      error: err
+    });
     console.error('Error in Q&A over reports:', err);
     return { error: 'Failed to complete Q&A due to AI service error.' };
   }

@@ -3,6 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '@/api/axios';
 import { useAuth } from '@/context/AuthContext';
+import { usePredictions } from '@/hooks/useML';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
@@ -18,6 +19,8 @@ import { formatDate } from '@/lib/utils';
 
 export default function PatientRecords() {
   const { profile } = useAuth();
+  const { data: predictionsRes } = usePredictions();
+  const predictions = predictionsRes?.data || [];
   const fileRef = useRef();
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -69,6 +72,7 @@ export default function PatientRecords() {
     mutationFn: (formData) => api.post('/records/upload', formData, { headers: { 'Content-Type': 'multipart/form-data' } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
+      queryClient.invalidateQueries({ queryKey: ['records', profile?._id] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['profile-records'] });
       queryClient.invalidateQueries({ queryKey: ['health-analytics'] });
@@ -176,6 +180,111 @@ export default function PatientRecords() {
           </Button>
         </div>
       </div>
+
+      {/* Machine Learning AI Disease Risk Dashboard */}
+      {predictions && predictions.length > 0 && (
+        <Card className="border border-teal-100 dark:border-slate-800 bg-gradient-to-br from-white to-teal-50/10 dark:from-slate-900 dark:to-slate-900 rounded-2xl shadow-sm overflow-hidden">
+          <CardHeader className="pb-3 border-b dark:border-slate-800">
+            <div className="flex items-center gap-2">
+              <div className="p-2 rounded-xl bg-teal-50 dark:bg-teal-950 text-teal-600 dark:text-teal-400">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <CardTitle className="text-base font-black text-slate-800 dark:text-slate-100">Machine Learning Health Risk Diagnostics</CardTitle>
+                <CardDescription className="text-xs font-semibold text-slate-500">
+                  Real-time calibrated model inference of chronic disease probabilities based on latest clinical metrics.
+                </CardDescription>
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6">
+            <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {predictions.map((pred, i) => {
+                const formattedName = pred.predictionType.charAt(0).toUpperCase() + pred.predictionType.slice(1).replace('_', ' ');
+                const isHigh = pred.riskLevel === 'High' || pred.riskLevel === 'Critical';
+                const isModerate = pred.riskLevel === 'Moderate';
+                const badgeColor = isHigh 
+                  ? 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-450 border border-rose-200' 
+                  : isModerate 
+                    ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-450 border border-amber-200' 
+                    : 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-450 border border-emerald-200';
+                
+                const progressColor = isHigh ? 'bg-rose-500' : isModerate ? 'bg-amber-500' : 'bg-emerald-500';
+
+                return (
+                  <div key={i} className="p-4 bg-slate-50 dark:bg-slate-955 rounded-2xl border dark:border-slate-850 space-y-3.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-slate-700 dark:text-slate-300">{formattedName}</span>
+                      <Badge className={`text-[10px] font-bold px-2 py-0.5 rounded-lg border-0 ${badgeColor}`}>
+                        {pred.riskLevel}
+                      </Badge>
+                    </div>
+                    
+                    <div className="space-y-1">
+                      <div className="flex justify-between text-[10px] font-black text-slate-400">
+                        <span>Risk Probability</span>
+                        <span>{pred.score}%</span>
+                      </div>
+                      <div className="w-full bg-slate-200 dark:bg-slate-800 h-1.5 rounded-full overflow-hidden">
+                        <div className={`h-full ${progressColor}`} style={{ width: `${pred.score}%` }} />
+                      </div>
+                    </div>
+
+                    <div className="space-y-1 pt-1.5 border-t dark:border-slate-800">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">Primary Markers</span>
+                      <div className="text-[10px] text-slate-600 dark:text-slate-400 leading-normal line-clamp-2">
+                        {pred.contributingFactors.join(' · ')}
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest block">AI Recommendation</span>
+                      <div className="text-[10px] text-teal-700 dark:text-teal-400 font-bold leading-normal">
+                        {pred.recommendations?.[0] || 'Keep regular monitoring schedules.'}
+                      </div>
+                    </div>
+
+                    {pred.explanations && (pred.explanations.positive?.length > 0 || pred.explanations.negative?.length > 0) && (
+                      <details className="group pt-2 border-t dark:border-slate-800">
+                        <summary className="list-none flex items-center justify-between text-[9px] font-black text-slate-400 uppercase tracking-widest cursor-pointer hover:text-slate-655 dark:hover:text-slate-200 select-none">
+                          <span>AI Risk Contributors (SHAP)</span>
+                          <span className="text-[9px] transition-transform group-open:rotate-180">▼</span>
+                        </summary>
+                        <div className="mt-2.5 space-y-2 text-[10px]">
+                          {pred.explanations.positive?.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="text-[8px] font-black text-rose-500 uppercase tracking-wider block">Increasing Risk</span>
+                              <div className="flex flex-wrap gap-1">
+                                {pred.explanations.positive.slice(0, 3).map((item, idx) => (
+                                  <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded bg-rose-50 dark:bg-rose-950/20 text-rose-600 dark:text-rose-400 font-bold border border-rose-100 dark:border-rose-900/30">
+                                    {item.feature}: +{item.value}%
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                          {pred.explanations.negative?.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="text-[8px] font-black text-emerald-500 uppercase tracking-wider block">Reducing Risk</span>
+                              <div className="flex flex-wrap gap-1">
+                                {pred.explanations.negative.slice(0, 3).map((item, idx) => (
+                                  <span key={idx} className="inline-flex items-center px-1.5 py-0.5 rounded bg-emerald-50 dark:bg-emerald-950/20 text-emerald-600 dark:text-emerald-400 font-bold border border-emerald-100 dark:border-emerald-900/30">
+                                    {item.feature}: -{item.value}%
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </details>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Main Filter & Lists */}
       <div className="space-y-6">

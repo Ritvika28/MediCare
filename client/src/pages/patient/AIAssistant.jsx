@@ -371,7 +371,7 @@ export default function AIAssistant() {
   const bottomRef = useRef();
 
   const [showErrorDialog, setShowErrorDialog] = useState(false);
-  const [errorDialogDetails, setErrorDialogDetails] = useState({ title: '', message: '', errorType: '' });
+  const [errorDialogDetails, setErrorDialogDetails] = useState({ title: '', message: '', errorType: '', recommendedAction: '', retryable: false });
   const [aiStatus, setAiStatus] = useState('available');
 
   // Fetch past conversations list
@@ -450,13 +450,15 @@ export default function AIAssistant() {
       if (errData && errData.success === false) {
         setErrorDialogDetails({
           title: errData.title || 'AI Service Error',
-          message: errData.message || 'I encountered an issue processing your request. Please try again.',
-          errorType: errData.errorType || 'UNKNOWN_ERROR'
+          message: errData.description || errData.message || 'I encountered an issue processing your request. Please try again.',
+          errorType: errData.errorCode || errData.errorType || 'UNKNOWN_ERROR',
+          recommendedAction: errData.recommendedAction || '',
+          retryable: errData.retryable ?? false
         });
         
-        if (errData.errorType === 'QUOTA_EXCEEDED') {
+        if (errData.errorCode === 'QUOTA_EXCEEDED') {
           setAiStatus('limited');
-        } else if (errData.errorType === 'RATE_LIMIT') {
+        } else if (errData.errorCode === 'RATE_LIMITED') {
           setAiStatus('high_load');
         } else {
           setAiStatus('offline');
@@ -468,7 +470,9 @@ export default function AIAssistant() {
           message: isOffline 
             ? 'We couldn’t connect to the AI service. Check your internet connection and try again.'
             : 'Gemini is currently unavailable. Please try again in a few minutes.',
-          errorType: isOffline ? 'NETWORK_ERROR' : 'SERVICE_DOWN'
+          errorType: isOffline ? 'NETWORK_ERROR' : 'SERVICE_DOWN',
+          recommendedAction: isOffline ? 'Verify your local network setup.' : 'Please wait and try again shortly.',
+          retryable: true
         });
         setAiStatus('offline');
       }
@@ -870,12 +874,19 @@ export default function AIAssistant() {
                 <p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Error Code: {errorDialogDetails.errorType}</p>
               </div>
             </div>
-            <p className="text-xs md:text-sm font-semibold leading-relaxed text-slate-500">{errorDialogDetails.message}</p>
+            <div className="space-y-2">
+              <p className="text-xs md:text-sm font-semibold leading-relaxed text-slate-500">{errorDialogDetails.message}</p>
+              {errorDialogDetails.recommendedAction && (
+                <p className="text-[11px] font-bold text-teal-600 dark:text-teal-400 bg-teal-500/5 p-2.5 rounded-xl border border-teal-500/10">
+                  💡 <strong>Recommended Action</strong>: {errorDialogDetails.recommendedAction}
+                </p>
+              )}
+            </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => { setShowErrorDialog(false); setAiStatus('available'); }} className="rounded-xl px-4 py-2 text-xs font-bold">
                 Close
               </Button>
-              {errorDialogDetails.errorType !== 'QUOTA_EXCEEDED' && errorDialogDetails.errorType !== 'AUTH_ERROR' && (
+              {errorDialogDetails.retryable && (
                 <Button 
                   onClick={() => {
                     setShowErrorDialog(false);

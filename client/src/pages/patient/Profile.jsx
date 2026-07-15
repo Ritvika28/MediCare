@@ -39,8 +39,12 @@ const TIMELINE_DOTS = {
 };
 
 export default function PatientProfile() {
-  const { user, profile, fetchUser } = useAuth();
+  const { user, profile, fetchUser, authInitialized } = useAuth();
+  const token = localStorage.getItem('accessToken');
+  const isEnabled = !!user && !!token && authInitialized;
   const { toast } = useToast();
+
+  console.log('[Profile UI] Render cycle details:', { authInitialized, user: !!user, token: !!token, isEnabled });
   const [showAllTimeline, setShowAllTimeline] = useState(false);
 
   const { data: twinData } = useHealthTwin();
@@ -162,27 +166,31 @@ export default function PatientProfile() {
   const appointments = [];
   const appointmentsLoading = false;
 
-  const { data: prescriptionsData, isLoading: prescriptionsLoading } = useQuery({
+  const { data: prescriptionsData, isLoading: prescriptionsLoading, error: prescriptionsError } = useQuery({
     queryKey: ['profile-prescriptions'],
     queryFn: () => api.get('/prescriptions').then((r) => r.data.data || []),
+    enabled: isEnabled,
   });
   const prescriptions = prescriptionsData || [];
 
-  const { data: recordsData, isLoading: recordsLoading } = useQuery({
+  const { data: recordsData, isLoading: recordsLoading, error: recordsError } = useQuery({
     queryKey: ['profile-records'],
     queryFn: () => api.get('/records').then((r) => r.data.data || []),
+    enabled: isEnabled,
   });
   const records = recordsData || [];
 
-  const { data: calcHistoryData, isLoading: calcHistoryLoading } = useQuery({
+  const { data: calcHistoryData, isLoading: calcHistoryLoading, error: calcHistoryError } = useQuery({
     queryKey: ['calculator-history'],
     queryFn: () => api.get('/calculators/history?limit=20').then((r) => r.data.data || []),
+    enabled: isEnabled,
   });
   const calcHistory = calcHistoryData || [];
 
-  const { data: healthMetricsRes, isLoading: metricsLoading } = useQuery({
+  const { data: healthMetricsRes, isLoading: metricsLoading, error: metricsError } = useQuery({
     queryKey: ['profile-health-metrics'],
     queryFn: () => api.get('/patients/health-metrics').then((r) => r.data.data),
+    enabled: isEnabled,
   });
   const latestMetrics = healthMetricsRes?.latest || {};
   const healthScore = healthMetricsRes?.healthScore;
@@ -259,10 +267,26 @@ export default function PatientProfile() {
 
     list.sort((a, b) => b.date.getTime() - a.date.getTime());
     setTimeline(list);
-  }, [appointmentsData, prescriptionsData, recordsData, calcHistoryData]);
+  }, [prescriptionsData, recordsData, calcHistoryData]);
 
   const timelineLoading = appointmentsLoading || prescriptionsLoading || recordsLoading || calcHistoryLoading;
   const displayedTimeline = showAllTimeline ? timeline : timeline.slice(0, 10);
+
+  if (!authInitialized || !user) {
+    console.log('[Profile UI] Auth is loading/not initialized yet. Showing skeleton screen.');
+    return (
+      <div className="flex min-h-screen items-center justify-center p-8 bg-slate-50 dark:bg-slate-950">
+        <div className="w-full max-w-md space-y-4">
+          <Skeleton className="h-8 w-48" />
+          <Skeleton className="h-32 w-full" />
+          <Skeleton className="h-32 w-full" />
+        </div>
+      </div>
+    );
+  }
+
+  const hasError = prescriptionsError || recordsError || calcHistoryError || metricsError;
+  console.log('[Profile UI] Error states check:', { prescriptionsError: !!prescriptionsError, recordsError: !!recordsError, calcHistoryError: !!calcHistoryError, metricsError: !!metricsError });
 
   return (
     <div className="space-y-6">
@@ -332,6 +356,10 @@ export default function PatientProfile() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {Array.from({ length: 7 }).map((_, i) => <Skeleton key={i} className="h-16 rounded-xl" />)}
               </div>
+            ) : metricsError ? (
+              <div className="text-xs text-rose-600 dark:text-rose-400 bg-rose-500/5 p-3.5 rounded-xl border border-rose-500/10 leading-relaxed font-semibold">
+                ⚠️ Health metrics temporarily unavailable.
+              </div>
             ) : (
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                 {metricCards.map(({ key, label, icon: Icon, format, color }, i) => {
@@ -363,8 +391,8 @@ export default function PatientProfile() {
       {/* Stats Counter Bar */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {[
-          { label: 'Active Prescriptions', count: prescriptions.length, icon: Pill, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/20' },
-          { label: 'Medical Records', count: records.length, icon: FileText, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20' },
+          { label: 'Active Prescriptions', count: prescriptionsError ? '—' : prescriptions.length, icon: Pill, color: 'text-indigo-600 bg-indigo-50 dark:bg-indigo-950/20' },
+          { label: 'Medical Records', count: recordsError ? '—' : records.length, icon: FileText, color: 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950/20' },
         ].map((stat, i) => (
           <motion.div key={stat.label} custom={i} initial="hidden" animate="show" variants={fadeUp}>
             <Card className="border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
@@ -386,6 +414,48 @@ export default function PatientProfile() {
       <div className="grid gap-6 lg:grid-cols-3">
         {/* Left Side: Passport Form */}
         <div className="lg:col-span-1 space-y-5">
+
+          {/* Levine PhenoAge Card */}
+          {profile?.biologicalAge !== undefined && (
+            <Card className="border border-indigo-100 dark:border-slate-800 bg-gradient-to-br from-white to-indigo-50/10 dark:from-slate-900 dark:to-slate-900 shadow-sm overflow-hidden rounded-2xl">
+              <CardHeader className="pb-3 border-b dark:border-slate-800/80">
+                <CardTitle className="text-base flex items-center gap-2 font-black">
+                  <Sparkles className="h-5 w-5 text-indigo-600" /> Biological Age (PhenoAge)
+                </CardTitle>
+                <CardDescription>Based on clinical biomarkers & age metrics</CardDescription>
+              </CardHeader>
+              <CardContent className="pt-5 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-0.5">
+                    <span className="text-2xl font-black text-slate-800 dark:text-white">{profile.biologicalAge} yrs</span>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Biological Age</p>
+                  </div>
+                  <div className="h-10 w-px bg-slate-200 dark:bg-slate-800" />
+                  <div className="space-y-0.5 text-right">
+                    <span className="text-2xl font-black text-slate-500 dark:text-slate-400">{profile.chronologicalAge} yrs</span>
+                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Chronological Age</p>
+                  </div>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-950 border dark:border-slate-850 flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-650 dark:text-slate-350">Age Acceleration</span>
+                  <Badge className={`text-[10px] font-black py-1 px-2 border-0 rounded-lg ${
+                    profile.ageDifference < 0
+                      ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400'
+                      : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-450'
+                  }`}>
+                    {profile.ageDifference < 0 ? '' : '+'}{profile.ageDifference} years
+                  </Badge>
+                </div>
+
+                <p className="text-[11px] text-slate-500 leading-relaxed text-center font-semibold">
+                  {profile.ageDifference < 0
+                    ? '🎉 Your biological health age is younger than your chronological age! Keep up your current healthy lifestyle.'
+                    : '⚠️ Your biological health age is older than your chronological age. Focus on sleep hygiene, activity, and nutrition.'}
+                </p>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Personal Info */}
           <Card className="border border-slate-200/80 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-sm">
@@ -525,45 +595,53 @@ export default function PatientProfile() {
               <CardDescription>Biological age estimate: {twinData?.data?.biologicalAgeEstimate ?? '—'} yrs</CardDescription>
             </CardHeader>
             <CardContent className="pt-4 space-y-4">
-              <div>
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Risk Factors</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {predictionsData?.data?.filter(p => p.score >= 50).map(p => (
-                    <Badge key={p.predictionType} className="bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 border border-rose-200/50 text-[10px] font-bold">
-                      ⚠️ {p.predictionType.charAt(0).toUpperCase() + p.predictionType.slice(1).replace('_', ' ')} ({p.score}%)
-                    </Badge>
-                  ))}
-                  {!predictionsData?.data?.some(p => p.score >= 50) && (
-                    <span className="text-xs text-emerald-600 font-semibold">✓ All vitals within normal ranges</span>
+              {(!twinData && isEnabled) ? (
+                <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-500/5 p-3.5 rounded-xl border border-amber-500/10 leading-relaxed font-semibold">
+                  💡 AI insights temporarily unavailable.
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Risk Factors</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {predictionsData?.data?.filter(p => p.score >= 50).map(p => (
+                        <Badge key={p.predictionType} className="bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 border border-rose-200/50 text-[10px] font-bold">
+                          ⚠️ {p.predictionType.charAt(0).toUpperCase() + p.predictionType.slice(1).replace('_', ' ')} ({p.score}%)
+                        </Badge>
+                      ))}
+                      {!predictionsData?.data?.some(p => p.score >= 50) && (
+                        <span className="text-xs text-emerald-600 font-semibold">✓ All vitals within normal ranges</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {forecastData?.data?.forecasts && (
+                    <div className="border-t dark:border-slate-800 pt-3">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Health Forecast Trajectory</p>
+                      <div className="space-y-1 text-xs text-slate-700 dark:text-slate-400 font-semibold">
+                        {forecastData.data.forecasts.map(f => (
+                          <div key={f.days} className="flex justify-between">
+                            <span>{f.days} Days Ahead</span>
+                            <span className="font-bold text-indigo-600 dark:text-indigo-400">{f.score}/100</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
                   )}
-                </div>
-              </div>
 
-              {forecastData?.data?.forecasts && (
-                <div className="border-t dark:border-slate-800 pt-3">
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Health Forecast Trajectory</p>
-                  <div className="space-y-1 text-xs text-slate-700 dark:text-slate-400 font-semibold">
-                    {forecastData.data.forecasts.map(f => (
-                      <div key={f.days} className="flex justify-between">
-                        <span>{f.days} Days Ahead</span>
-                        <span className="font-bold text-indigo-600 dark:text-indigo-400">{f.score}/100</span>
+                  {anomaliesData?.data?.length > 0 && (
+                    <div className="border-t dark:border-slate-800 pt-3">
+                      <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-2">Active Health Alerts</p>
+                      <div className="space-y-2">
+                        {anomaliesData.data.slice(0, 2).map((a, i) => (
+                          <div key={i} className="text-[11px] text-rose-700 bg-rose-50/50 dark:bg-rose-950/20 p-2 rounded-lg border border-rose-100/50 leading-relaxed font-semibold">
+                            {a.message}
+                          </div>
+                        ))}
                       </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {anomaliesData?.data?.length > 0 && (
-                <div className="border-t dark:border-slate-800 pt-3">
-                  <p className="text-[10px] font-bold text-rose-500 uppercase tracking-wider mb-2">Active Health Alerts</p>
-                  <div className="space-y-2">
-                    {anomaliesData.data.slice(0, 2).map((a, i) => (
-                      <div key={i} className="text-[11px] text-rose-700 bg-rose-50/50 dark:bg-rose-950/20 p-2 rounded-lg border border-rose-100/50 leading-relaxed font-semibold">
-                        {a.message}
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                    </div>
+                  )}
+                </>
               )}
             </CardContent>
           </Card>
@@ -590,6 +668,12 @@ export default function PatientProfile() {
                       </div>
                     </div>
                   ))}
+                </div>
+              ) : (recordsError || prescriptionsError || calcHistoryError) ? (
+                <div className="text-center py-12 text-slate-500 border border-dashed dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/10">
+                  <Activity className="h-10 w-10 text-rose-500 mx-auto mb-2 animate-pulse" />
+                  <p className="font-extrabold text-slate-800 dark:text-slate-200">Timeline partially unavailable</p>
+                  <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">Some of your prescriptions or record logs could not be loaded at this time.</p>
                 </div>
               ) : timeline.length === 0 ? (
                 <div className="text-center py-12 text-slate-500 border border-dashed dark:border-slate-800 rounded-2xl bg-slate-50/50 dark:bg-slate-900/10">

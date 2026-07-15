@@ -2,7 +2,8 @@ import { GoogleGenAI } from '@google/genai';
 import { Patient } from '../models/Patient.js';
 import { Reminder } from '../models/Reminder.js';
 import { Prescription } from '../models/Prescription.js';
-import { getUserComprehensiveContext } from './aiService.js';
+import { getUserComprehensiveContext, callGeminiWithRetry } from './aiService.js';
+import { logAIRequest } from '../utils/aiLogger.js';
 
 let geminiClient;
 const getGeminiClient = () => {
@@ -109,16 +110,26 @@ Return ONLY a JSON response in the following format:
   ]
 }`;
 
-    const response = await client.models.generateContent({
+    const startTime = Date.now();
+    const response = await callGeminiWithRetry(() => client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         temperature: 0.1
       }
-    });
+    }));
 
     const parsed = parseGeminiJSON(response.text);
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      userId,
+      endpoint: '/medicine-interactions',
+      geminiRequest: { model: 'gemini-2.5-flash', medicines: queryMeds },
+      geminiResponseTime: duration,
+      status: 'success'
+    });
+
     return {
       success: true,
       checkedMedicines: queryMeds,
@@ -127,6 +138,14 @@ Return ONLY a JSON response in the following format:
       interactions: parsed.interactions || []
     };
   } catch (err) {
+    await logAIRequest({
+      userId,
+      endpoint: '/medicine-interactions',
+      geminiRequest: { model: 'gemini-2.5-flash', medicines: queryMeds },
+      geminiResponseTime: 0,
+      status: 'failed',
+      error: err
+    });
     console.error('Error checking medicine interactions:', err);
     return { error: 'Failed to run medicine interaction check due to AI API error.' };
   }

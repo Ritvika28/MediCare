@@ -15,11 +15,41 @@ import { calculateHealthScore, getHealthAlerts } from '../services/healthScoreSe
 import { getHealthAnalytics, buildHealthTimeline } from '../services/healthAnalyticsService.js';
 import { getLatestMetrics } from '../services/healthMetricService.js';
 import { getNearbyHealthcareSummary } from '../services/nearbySummaryService.js';
+import { runPythonInference } from '../ml/inferenceBridge.js';
+import { calculateAge } from '../services/RiskPredictionService.js';
 
 export const getProfile = asyncHandler(async (req, res) => {
   const patient = await Patient.findOne({ user: req.user._id }).populate('user', '-password');
   if (!patient) throw new AppError('Patient profile not found', 404);
-  res.json({ success: true, data: patient });
+
+  const age = calculateAge(patient.dateOfBirth) || 35;
+  let biologicalAge = age;
+  try {
+    const res = await runPythonInference({
+      task: 'biological_age',
+      features: {
+        RIDAGEYR: age,
+        LBXSAL: 4.2,
+        LBXSCR: 0.8,
+        LBXGLU: 95,
+        LBXLYPCT: 30,
+        LBXMCVSI: 90,
+        LBXRDW: 13.0,
+        LBXSAPSI: 70,
+        LBXWBCSI: 6.0
+      }
+    });
+    biologicalAge = res.biological_age;
+  } catch (err) {
+    console.error("Python biological age inference error:", err);
+  }
+
+  const patientObj = patient.toObject();
+  patientObj.biologicalAge = biologicalAge;
+  patientObj.chronologicalAge = age;
+  patientObj.ageDifference = parseFloat((biologicalAge - age).toFixed(2));
+
+  res.json({ success: true, data: patientObj });
 });
 
 export const updateProfile = asyncHandler(async (req, res) => {
@@ -139,8 +169,29 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
   const waterIntake = latest.waterIntake ?? 0;
   const waterTarget = latest.waterTarget ?? 3.0;
 
-  // 6. Base Health Score
+  // 6. Base Health Score & Health Stability Score
   const healthScore = calculateHealthScore(patient, records);
+  const age = calculateAge(patient.dateOfBirth) || 35;
+  let healthStabilityScore = 75;
+  try {
+    const res = await runPythonInference({
+      task: 'health_score',
+      features: {
+        Systolic_BP: latest.bloodPressure || 120,
+        Diastolic_BP: latest.bloodPressureStatus === 'stage2' ? 95 : 80,
+        BMI: bmi || 22.0,
+        Sleep_Score: latest.sleepScore || 80,
+        LBXGLU: latest.bloodSugar || 95,
+        LBDHDD: 50,
+        LBXTC: 180,
+        RIDAGEYR: age,
+        BPXPLS: 72
+      }
+    });
+    healthStabilityScore = res.health_stability_score;
+  } catch (err) {
+    console.error("Python health score inference error:", err);
+  }
 
   // 7. Dynamic health tips from insights
   const healthTips = insights?.length > 0
@@ -167,6 +218,7 @@ export const getDashboardStats = asyncHandler(async (req, res) => {
     success: true,
     data: {
       healthScore,
+      healthStabilityScore,
       riskScore,
       riskLevel,
       todayMedicines: todayReminders,

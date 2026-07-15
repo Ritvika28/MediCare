@@ -199,7 +199,7 @@ const seed = async () => {
     answers: {
       age: 36, gender: 'male', height: 178, weight: 82,
       smoking: 'never', alcohol: 'occasional', bloodPressure: 'normal',
-      exercise: 'moderate', sleep: 7, stress: 'moderate', diabetes: false,
+      exercise: 'active', sleep: 7, stress: 'moderate', diabetes: false,
       familyHistory: ['diabetes'],
     },
     riskScore: 28,

@@ -30,10 +30,16 @@ const bloodBankSchema = new mongoose.Schema({
   emergencyContact: { type: String, required: true },
   timings: { type: String, default: '24x7' },
   rating: { type: Number, default: 0, min: 0, max: 5 },
-  volunteers: [volunteerSchema]
+  volunteers: [volunteerSchema],
+  emergency: { type: Boolean, default: true },
+  verified: { type: Boolean, default: false }
 }, { timestamps: true });
 
 bloodBankSchema.index({ location: '2dsphere' });
 bloodBankSchema.index({ 'address.city': 1 });
+bloodBankSchema.index({ 'address.state': 1 });
+bloodBankSchema.index({ emergency: 1 });
+bloodBankSchema.index({ verified: 1 });
+bloodBankSchema.index({ 'bloodGroups.group': 1 });
 
 export const BloodBank = mongoose.model('BloodBank', bloodBankSchema);

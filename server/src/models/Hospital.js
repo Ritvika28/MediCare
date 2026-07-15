@@ -64,6 +64,7 @@ const hospitalSchema = new mongoose.Schema(
     rating: { type: Number, default: 0, min: 0, max: 5 },
     reviewCount: { type: Number, default: 0 },
     isActive: { type: Boolean, default: true },
+    verified: { type: Boolean, default: false },
   },
   { timestamps: true, toJSON: { virtuals: true }, toObject: { virtuals: true } }
 );
@@ -99,5 +100,11 @@ hospitalSchema.virtual('totalDepartments').get(function () {
 hospitalSchema.index({ location: '2dsphere' });
 hospitalSchema.index({ name: 'text', 'address.city': 'text' });
 hospitalSchema.index({ isActive: 1, rating: -1 });
+hospitalSchema.index({ 'address.city': 1 });
+hospitalSchema.index({ 'address.state': 1 });
+hospitalSchema.index({ specialties: 1 });
+hospitalSchema.index({ verified: 1 });
+hospitalSchema.index({ 'facilities.Emergency': 1 });
+hospitalSchema.index({ 'facilities.ICU': 1 });
 
 export const Hospital = mongoose.model('Hospital', hospitalSchema);

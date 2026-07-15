@@ -9,6 +9,7 @@ router.use(protect);
 
 router.post('/upload', upload.single('file'), medicalRecordController.uploadRecord);
 router.get('/patient/:patientId', medicalRecordController.getRecords);
+router.get('/', medicalRecordController.getRecords);
 router.get('/:id', medicalRecordController.getRecord);
 router.post('/:id/share', medicalRecordController.shareRecord);
 router.delete('/:id', medicalRecordController.deleteRecord);

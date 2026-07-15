@@ -1,18 +1,12 @@
-import { Hospital } from '../models/Hospital.js';
-import { Doctor } from '../models/Doctor.js';
-import { Lab } from '../models/Lab.js';
-import { BloodBank } from '../models/BloodBank.js';
 import { SearchHistory } from '../models/SearchHistory.js';
-import { GeoCache } from '../models/GeoCache.js';
-import { forwardGeocode, reverseGeocode } from './geocodeService.js';
-import { fetchNearbyHealthcareFromOverpass } from './overpassService.js';
-import { rankResults } from './rankingService.js';
-import { haversineDistance } from './locationService.js';
+import { forwardGeocode } from './geocodeService.js';
 import { GoogleGenAI } from '@google/genai';
-import { buildHospitalSearchFilter } from './hospitalSearchService.js';
-import { searchDoctorsNearby } from './doctorSearchService.js';
-import { buildLabSearchFilter } from '../controllers/labController.js';
-import { buildBloodBankSearchFilter } from '../controllers/bloodBankController.js';
+
+// Import modular healthcare search services
+import { DatasetService } from './DatasetService.js';
+import { OverpassLiveService } from './OverpassLiveService.js';
+import { MergeService } from './MergeService.js';
+import { RankingEngineService } from './RankingEngineService.js';
 
 // Initialize Gemini for intent extraction
 const getGeminiClient = () => {
@@ -103,71 +97,9 @@ const fallbackIntentExtractor = (query) => {
 };
 
 /**
- * Intelligent duplicate removal comparing names, address similarity, and distance coordinates.
- * Direct MongoDB items receive verified status and priority.
- */
-export const deduplicateHealthcare = (networkItems, overpassItems) => {
-  const merged = [];
-  const seenNames = new Set();
-
-  const getCanonicalName = (name) => {
-    return (name || '')
-      .toLowerCase()
-      .trim()
-      .replace(/hospital|clinic|center|healthcare|diagnostic|lab|laboratory|blood bank|pharmacy/gi, '')
-      .replace(/[^a-z0-9]/gi, '')
-      .trim();
-  };
-
-  // 1. Add direct network items first (trusted source)
-  networkItems.forEach(item => {
-    const canonical = getCanonicalName(item.name);
-    if (canonical) seenNames.add(canonical);
-    merged.push({
-      ...item.toObject ? item.toObject() : item,
-      isVerified: true,
-      source: 'mongodb'
-    });
-  });
-
-  // 2. Add Overpass items that don't match names or close coordinate distances
-  overpassItems.forEach(item => {
-    const canonical = getCanonicalName(item.name);
-    
-    // Check name similarity
-    let isDuplicate = seenNames.has(canonical);
-    
-    // Check coordinate distance threshold (within 150 meters)
-    if (!isDuplicate) {
-      isDuplicate = networkItems.some(net => {
-        const netLat = net.latitude || net.location?.coordinates?.[1];
-        const netLng = net.longitude || net.location?.coordinates?.[0];
-        const osmLat = item.latitude;
-        const osmLng = item.longitude;
-        if (netLat && netLng && osmLat && osmLng) {
-          const dist = haversineDistance(netLat, netLng, osmLat, osmLng);
-          return dist < 0.15; // 150m threshold
-        }
-        return false;
-      });
-    }
-
-    if (!isDuplicate) {
-      if (canonical) seenNames.add(canonical);
-      merged.push({
-        ...item,
-        isVerified: false,
-        source: 'overpass'
-      });
-    }
-  });
-
-  return merged;
-};
-
-/**
  * Main Centralized Search Engine Coordinator.
- * Evaluates the query/location options and runs the matching search pipeline.
+ * Always executes concurrent MongoDB (DatasetService) and Overpass Live (OverpassLiveService) queries,
+ * then maps, merges, and ranks them.
  */
 export const unifiedSearchHealthcare = async (options = {}, userId = null) => {
   const {
@@ -236,7 +168,7 @@ export const unifiedSearchHealthcare = async (options = {}, userId = null) => {
       }
     }
 
-    // B. Fallback: Query contains mixed keywords (e.g. "MRI Jodhpur"). Strip keywords to get location.
+    // B. Fallback: Query contains mixed keywords. Strip keywords to get location.
     if (!isGeographicPlaceDetected) {
       let locationText = nameFilterText.toLowerCase();
       clinicalKeywords.forEach(kw => {
@@ -293,7 +225,7 @@ export const unifiedSearchHealthcare = async (options = {}, userId = null) => {
     detectedCity = detectedCity || 'Delhi';
   }
 
-  // 2. Track search history per authenticated user (Search History tracking)
+  // 2. Track search history per authenticated user
   if (userId && query.trim()) {
     try {
       await SearchHistory.findOneAndUpdate(
@@ -311,197 +243,35 @@ export const unifiedSearchHealthcare = async (options = {}, userId = null) => {
     }
   }
 
-  // 3. Centralized Search Pipeline execution based on target categories
+  // 3. Centralized Parallel Search execution (both MongoDB and OSM/Overpass in parallel)
   let dbResults = [];
   let osmResults = [];
 
-  const latQuery = searchLat;
-  const lngQuery = searchLng;
-  const radiusQuery = searchRadiusM;
+  const searchPromises = [
+    // Database search promise
+    DatasetService.queryDataset(entityType, nameFilterText, searchLat, searchLng, searchRadiusM, {
+      ...filters,
+      city: detectedCity
+    }).then(res => {
+      dbResults = res;
+    }).catch(err => {
+      console.error('[Search Engine] Dataset query error in coordinator:', err.message);
+    }),
 
-  const mongoPointQuery = {
-    location: {
-      $near: {
-        $geometry: { type: 'Point', coordinates: [lngQuery, latQuery] },
-        $maxDistance: radiusQuery
-      }
-    }
-  };
+    // Overpass search promise
+    OverpassLiveService.queryOverpass(entityType, searchLat, searchLng, searchRadiusM, nameFilterText).then(res => {
+      osmResults = res;
+    }).catch(err => {
+      console.error('[Search Engine] Overpass query error in coordinator:', err.message);
+    })
+  ];
 
-  // Perform parallel entity query searches using Promise.all for optimization
-  const queryPromises = [];
-
-  // A. HOSPITALS — Uses full clinical filter logic (ICU, MRI, CT Scan, Facilities, Specialties)
-  if (entityType === 'all' || entityType === 'hospital') {
-    queryPromises.push((async () => {
-      try {
-        // Build the full clinical filter using hospitalSearchService (preserves all ICU/MRI/Specialty filters)
-        const baseFilter = await buildHospitalSearchFilter({
-          search: nameFilterText,
-          city: detectedCity,
-          facilities: filters.facilities,
-        });
-
-        // Combine with geo-proximity filter
-        // Only apply $near if we have valid coords (Mongoose requires 2dsphere index)
-        let dbQuery;
-        if (!Number.isNaN(latQuery) && !Number.isNaN(lngQuery)) {
-          dbQuery = { ...baseFilter, ...mongoPointQuery };
-        } else {
-          dbQuery = { ...baseFilter, isActive: true };
-        }
-
-        const items = await Hospital.find(dbQuery).populate('departments').limit(40).lean();
-        dbResults.push(...items.map(i => ({ ...i, type: 'hospital' })));
-      } catch (err) {
-        // If $near fails (e.g. missing geo index), fall back to non-spatial search
-        console.warn('[Search Engine] Hospital geo query failed, falling back:', err.message);
-        const baseFilter = await buildHospitalSearchFilter({
-          search: nameFilterText,
-          city: detectedCity,
-          facilities: filters.facilities,
-        });
-        const items = await Hospital.find(baseFilter).populate('departments').limit(40).lean();
-        dbResults.push(...items.map(i => ({ ...i, type: 'hospital' })));
-      }
-
-      // Fetch Overpass matching hospitals (always centered on the overridden/detected location)
-      if (!Number.isNaN(latQuery) && !Number.isNaN(lngQuery)) {
-        const osm = await fetchNearbyHealthcareFromOverpass(latQuery, lngQuery, 'hospital', radiusQuery, filters.facilities || nameFilterText);
-        osmResults.push(...osm.map(i => ({ ...i, type: 'hospital' })));
-      }
-    })());
-  }
-
-  // B. CLINICS & PHARMACIES (Overpass only)
-  if (entityType === 'clinic' || entityType === 'pharmacy') {
-    queryPromises.push((async () => {
-      if (!Number.isNaN(latQuery) && !Number.isNaN(lngQuery)) {
-        const osm = await fetchNearbyHealthcareFromOverpass(latQuery, lngQuery, entityType, radiusQuery, nameFilterText);
-        osmResults.push(...osm.map(i => ({ ...i, type: entityType })));
-      }
-    })());
-  }
-
-  // C. DOCTORS — MongoDB ONLY (never Overpass). Uses searchDoctorsNearby for complete clinical matching.
-  if (entityType === 'all' || entityType === 'doctor') {
-    queryPromises.push((async () => {
-      try {
-        const docParams = {
-          search: nameFilterText,
-          city: detectedCity,
-          lat: latQuery,
-          lng: lngQuery,
-          latitude: latQuery,
-          longitude: lngQuery,
-          radius: radius,
-          specialization: filters.specialty,
-          gender: filters.gender,
-          limit: 40,
-          page: 1,
-        };
-
-        const { doctors } = await searchDoctorsNearby(docParams);
-
-        const doctorsMapped = doctors.map(doc => {
-          const docObj = doc.toObject ? doc.toObject() : { ...doc };
-          const hospital = docObj.hospitalId || docObj.hospital;
-          const hospLat = hospital?.location?.coordinates?.[1] || latQuery;
-          const hospLng = hospital?.location?.coordinates?.[0] || lngQuery;
-          return {
-            ...docObj,
-            type: 'doctor',
-            name: docObj.name || `Dr. ${docObj.user?.firstName || ''} ${docObj.user?.lastName || ''}`.trim(),
-            specialty: docObj.specialization || docObj.specialty,
-            hospitalName: hospital?.name || docObj.hospitalName || 'Private Clinic',
-            latitude: hospLat,
-            longitude: hospLng,
-            consultationFee: docObj.consultationFee || 500,
-            experience: docObj.experience || docObj.experienceYears || 5,
-            rating: docObj.rating || 4.5,
-          };
-        });
-        dbResults.push(...doctorsMapped);
-      } catch (err) {
-        console.warn('[Search Engine] Doctor search failed:', err.message);
-      }
-    })());
-  }
-
-  // D. LABORATORIES — Uses buildLabSearchFilter (preserves test keyword matching: MRI, CT, blood, ultrasound)
-  if (entityType === 'all' || entityType === 'lab') {
-    queryPromises.push((async () => {
-      try {
-        const labFilter = buildLabSearchFilter({
-          search: nameFilterText,
-          city: detectedCity,
-        });
-
-        let dbQuery;
-        if (!Number.isNaN(latQuery) && !Number.isNaN(lngQuery)) {
-          dbQuery = { ...labFilter, ...mongoPointQuery };
-        } else {
-          dbQuery = { ...labFilter };
-        }
-
-        const items = await Lab.find(dbQuery).limit(40).lean();
-        dbResults.push(...items.map(i => ({ ...i, type: 'lab' })));
-      } catch (err) {
-        console.warn('[Search Engine] Lab geo query failed, falling back:', err.message);
-        const labFilter = buildLabSearchFilter({ search: nameFilterText, city: detectedCity });
-        const items = await Lab.find(labFilter).limit(40).lean();
-        dbResults.push(...items.map(i => ({ ...i, type: 'lab' })));
-      }
-
-      if (!Number.isNaN(latQuery) && !Number.isNaN(lngQuery)) {
-        const osm = await fetchNearbyHealthcareFromOverpass(latQuery, lngQuery, 'laboratory', radiusQuery, nameFilterText);
-        osmResults.push(...osm.map(i => ({ ...i, type: 'lab' })));
-      }
-    })());
-  }
-
-  // E. BLOOD BANKS — Uses buildBloodBankSearchFilter (blood group filtering, hospital lookup)
-  if (entityType === 'all' || entityType === 'blood_bank') {
-    queryPromises.push((async () => {
-      try {
-        const { filter: bbFilter } = await buildBloodBankSearchFilter({
-          search: nameFilterText,
-          city: detectedCity,
-          bloodGroup: filters.bloodGroup,
-        });
-
-        let dbQuery;
-        if (!Number.isNaN(latQuery) && !Number.isNaN(lngQuery)) {
-          dbQuery = { ...bbFilter, ...mongoPointQuery };
-        } else {
-          dbQuery = { ...bbFilter };
-        }
-
-        const items = await BloodBank.find(dbQuery).populate('hospital', 'name').limit(40).lean();
-        dbResults.push(...items.map(i => ({ ...i, type: 'blood_bank' })));
-      } catch (err) {
-        console.warn('[Search Engine] Blood bank geo query failed, falling back:', err.message);
-        const { filter: bbFilter } = await buildBloodBankSearchFilter({
-          search: nameFilterText,
-          city: detectedCity,
-          bloodGroup: filters.bloodGroup,
-        });
-        const items = await BloodBank.find(bbFilter).populate('hospital', 'name').limit(40).lean();
-        dbResults.push(...items.map(i => ({ ...i, type: 'blood_bank' })));
-      }
-
-      if (!Number.isNaN(latQuery) && !Number.isNaN(lngQuery)) {
-        const osm = await fetchNearbyHealthcareFromOverpass(latQuery, lngQuery, 'blood_bank', radiusQuery, nameFilterText);
-        osmResults.push(...osm.map(i => ({ ...i, type: 'blood_bank' })));
-      }
-    })());
-  }
-
-  await Promise.all(queryPromises);
+  // Execute queries concurrently
+  await Promise.all(searchPromises);
 
   // 4. Merge, Deduplicate, and rank results using Smart Ranking engine
-  const mergedResults = deduplicateHealthcare(dbResults, osmResults);
-  const rankedResults = rankResults(mergedResults, latQuery, lngQuery, {
+  const mergedResults = MergeService.mergeResults(dbResults, osmResults, searchLat, searchLng);
+  const rankedResults = RankingEngineService.rankResults(mergedResults, searchLat, searchLng, {
     specialty: filters.specialty || nameFilterText,
     emergency: filters.emergency
   });
@@ -519,9 +289,17 @@ export const unifiedSearchHealthcare = async (options = {}, userId = null) => {
   }
 
   return {
-    latitude: latQuery,
-    longitude: lngQuery,
+    latitude: searchLat,
+    longitude: searchLng,
     city: detectedCity,
     results: finalFiltered
   };
+};
+
+/**
+ * Intelligent duplicate removal comparing names and coordinate distances.
+ * Maintained for backward compatibility.
+ */
+export const deduplicateHealthcare = (networkItems, overpassItems) => {
+  return MergeService.mergeResults(networkItems, overpassItems, 0, 0);
 };

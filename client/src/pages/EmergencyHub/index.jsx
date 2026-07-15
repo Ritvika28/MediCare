@@ -8,10 +8,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { Badge } from '@/components/ui/Badge';
+import { Skeleton } from '@/components/ui/Skeleton';
 import {
   Phone, HeartPulse, AlertTriangle, Clock, MapPin, Navigation,
   User, ShieldAlert, Ambulance, Plus, Trash2, Edit2, Share2,
-  CheckCircle, Info, Activity, Star, X, Siren
+  CheckCircle, Info, Activity, Star, X, Siren, Droplet, Pill, ChevronDown, ChevronUp, Brain
 } from 'lucide-react';
 
 // ─── Static Data ─────────────────────────────────────────────────────────────
@@ -116,6 +117,23 @@ export default function EmergencyHub() {
   const [editingId, setEditingId] = useState(null);
   const [showContactForm, setShowContactForm] = useState(false);
   const [activeTab, setActiveTab] = useState('sos'); // 'sos' | 'guides' | 'history'
+  const [resourceTab, setResourceTab] = useState('Hospitals');
+  const [aiCondition, setAiCondition] = useState('');
+  const [aiGuidance, setAiGuidance] = useState('');
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const getAIFirstAid = async (condName) => {
+    setAiLoading(true);
+    setAiGuidance('');
+    try {
+      const res = await api.post('/ai/first-aid', { condition: condName });
+      setAiGuidance(res.data.data.content);
+    } catch (err) {
+      toast('Failed to load AI guidance', 'error');
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   const mapContainerRef = useRef(null);
   const mapInstanceRef = useRef(null);
@@ -214,20 +232,62 @@ export default function EmergencyHub() {
     const markers = markerGroupRef.current;
     markers.clearLayers();
 
+    // 1. User Location (Blue marker)
     const userIcon = L.divIcon({
       html: `<div class="relative flex h-5 w-5"><span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span><span class="relative inline-flex rounded-full h-5 w-5 bg-blue-600 border-2 border-white shadow"></span></div>`,
       className: 'custom-user-marker', iconSize: [20, 20], iconAnchor: [10, 10],
     });
     L.marker([latitude, longitude], { icon: userIcon }).addTo(markers).bindPopup('<b>Your Location</b>').openPopup();
 
-    if (nearest?.hospital?.location?.coordinates) {
-      const [hLng, hLat] = nearest.hospital.location.coordinates;
-      const hospitalIcon = L.divIcon({
-        html: `<div class="flex items-center justify-center h-8 w-8 rounded-full bg-red-600 border-2 border-white shadow-lg text-white animate-pulse"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></div>`,
-        className: 'custom-hospital-marker', iconSize: [32, 32], iconAnchor: [16, 16],
+    const bounds = [[latitude, longitude]];
+
+    // 2. Primary Nearest Emergency Hospital (Big Red marker)
+    if (nearest?.hospital) {
+      const coords = nearest.hospital.location?.coordinates || [nearest.hospital.longitude, nearest.hospital.latitude];
+      if (coords && coords.length === 2) {
+        const [hLng, hLat] = coords;
+        const hospitalIcon = L.divIcon({
+          html: `<div class="flex items-center justify-center h-8 w-8 rounded-full bg-red-600 border-2 border-white shadow-lg text-white animate-pulse"><svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></div>`,
+          className: 'custom-hospital-marker', iconSize: [32, 32], iconAnchor: [16, 16],
+        });
+        L.marker([hLat, hLng], { icon: hospitalIcon }).addTo(markers).bindPopup(`<b>${nearest.hospital.name}</b><br/>Emergency Ward (Primary)`);
+        bounds.push([hLat, hLng]);
+      }
+    }
+
+    // 3. Other Hospitals (Smaller Red markers)
+    if (nearest?.nearestHospitals) {
+      nearest.nearestHospitals.forEach(h => {
+        const coords = h.location?.coordinates || [h.longitude, h.latitude];
+        if (!coords || coords.length !== 2) return;
+        const [hLng, hLat] = coords;
+        if (nearest.hospital && h._id === nearest.hospital._id) return;
+        const subIcon = L.divIcon({
+          html: `<div class="flex items-center justify-center h-6 w-6 rounded-full bg-red-500 border border-white text-white shadow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/></svg></div>`,
+          className: 'custom-hospital-sub-marker', iconSize: [24, 24], iconAnchor: [12, 12],
+        });
+        L.marker([hLat, hLng], { icon: subIcon }).addTo(markers).bindPopup(`<b>${h.name}</b><br/>Emergency Ward`);
+        bounds.push([hLat, hLng]);
       });
-      L.marker([hLat, hLng], { icon: hospitalIcon }).addTo(markers).bindPopup(`<b>${nearest.hospital.name}</b><br/>Emergency Ward`);
-      mapInstanceRef.current.fitBounds(L.latLngBounds([[latitude, longitude], [hLat, hLng]]), { padding: [40, 40] });
+    }
+
+    // 4. Blood Banks (Rose markers)
+    if (nearest?.nearestBloodBanks) {
+      nearest.nearestBloodBanks.forEach(b => {
+        const coords = b.location?.coordinates || [b.longitude, b.latitude];
+        if (!coords || coords.length !== 2) return;
+        const [bLng, bLat] = coords;
+        const bloodIcon = L.divIcon({
+          html: `<div class="flex items-center justify-center h-6 w-6 rounded-full bg-rose-700 border border-white text-white shadow"><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22a7 7 0 0 0 7-7c0-4.3-7-11-7-11S5 10.7 5 15a7 7 0 0 0 7 7z"/></svg></div>`,
+          className: 'custom-blood-marker', iconSize: [24, 24], iconAnchor: [12, 12],
+        });
+        L.marker([bLat, bLng], { icon: bloodIcon }).addTo(markers).bindPopup(`<b>${b.name}</b><br/>Blood Centre`);
+        bounds.push([bLat, bLng]);
+      });
+    }
+
+    if (bounds.length > 1) {
+      mapInstanceRef.current.fitBounds(L.latLngBounds(bounds), { padding: [40, 40] });
     }
   }, [latitude, longitude, hasLocation, nearest]);
 
@@ -369,22 +429,32 @@ export default function EmergencyHub() {
               </div>
 
               {/* SOS Buttons */}
-              <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  <a href="tel:108" className="w-full">
+                    <Button
+                      className="w-full bg-red-600 hover:bg-red-700 text-white font-black rounded-xl gap-2 py-3 text-sm shadow-md hover:shadow-rose-500/30 hover:shadow-lg transition-all"
+                    >
+                      <Ambulance className="h-5 w-5" />
+                      Call Ambulance (108)
+                    </Button>
+                  </a>
+                  <Button
+                    onClick={() => requestMutation.mutate('emergency_alert')}
+                    disabled={requestMutation.isPending}
+                    className="bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl gap-2 py-3 text-sm shadow-md transition-all"
+                  >
+                    <User className="h-5 w-5" />
+                    {requestMutation.isPending ? 'Sending…' : 'Notify My Contacts'}
+                  </Button>
+                </div>
                 <Button
                   onClick={() => requestMutation.mutate('ambulance')}
                   disabled={!hasLocation || requestMutation.isPending}
-                  className="bg-red-600 hover:bg-red-700 text-white font-black rounded-xl gap-2 py-3 text-sm shadow-md hover:shadow-rose-500/30 hover:shadow-lg transition-all"
+                  variant="outline"
+                  className="w-full border-rose-500/30 text-rose-600 hover:bg-rose-500/5 font-bold rounded-xl py-2 text-xs transition-all"
                 >
-                  <Ambulance className="h-5 w-5" />
-                  {requestMutation.isPending ? 'Sending…' : 'Request Ambulance'}
-                </Button>
-                <Button
-                  onClick={() => requestMutation.mutate('emergency_alert')}
-                  disabled={requestMutation.isPending}
-                  className="bg-orange-600 hover:bg-orange-700 text-white font-black rounded-xl gap-2 py-3 text-sm shadow-md transition-all"
-                >
-                  <User className="h-5 w-5" />
-                  {requestMutation.isPending ? 'Sending…' : 'Notify My Contacts'}
+                  📡 Send SOS Dispatch Signal to Platform
                 </Button>
               </div>
             </CardContent>
@@ -408,6 +478,157 @@ export default function EmergencyHub() {
               )}
             </CardContent>
           </Card>
+
+          {/* Nearest Resources Section */}
+          {nearest && (
+            <Card className="rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-sm overflow-hidden bg-slate-950 text-white">
+              <CardHeader className="pb-3 border-b border-slate-800 bg-slate-900/40">
+                <CardTitle className="text-base font-black flex items-center gap-2">
+                  <HeartPulse className="h-5 w-5 text-rose-500 animate-pulse" /> Nearest Emergency Resources
+                </CardTitle>
+                <CardDescription className="text-slate-400">Showing local trauma centers, blood banks, ambulances, and pharmacies</CardDescription>
+              </CardHeader>
+              <CardContent className="p-4 space-y-4">
+                {/* Tabs */}
+                <div className="flex gap-2 overflow-x-auto pb-1.5 scrollbar-thin">
+                  {['Hospitals', 'Blood Banks', 'Ambulances', 'Pharmacies'].map(tab => (
+                    <button
+                      key={tab}
+                      onClick={() => setResourceTab(tab)}
+                      className={`px-4 py-2 rounded-xl text-xs font-black shrink-0 border transition-all ${
+                        resourceTab === tab
+                          ? 'bg-rose-600 border-rose-600 text-white shadow-md'
+                          : 'bg-slate-800 border-slate-700 text-slate-300 hover:bg-slate-700'
+                      }`}
+                    >
+                      {tab}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Tab Contents */}
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-1">
+                  {resourceTab === 'Hospitals' && nearest.nearestHospitals?.map(h => {
+                    const coords = h.location?.coordinates || [h.longitude, h.latitude];
+                    const routeUrl = `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${coords[1]},${coords[0]}`;
+                    return (
+                      <div key={h._id} className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 flex justify-between items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-slate-100 truncate">{h.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            📍 {h.distanceKm ? `${h.distanceKm.toFixed(1)} km away` : (h.distance ? `${(h.distance / 1000).toFixed(1)} km away` : '—')} · {h.emergencyAvailable ? '🔴 Emergency Unit Active' : 'Emergency Services'}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {h.phone && (
+                            <a href={`tel:${h.phone}`}>
+                              <Button size="sm" className="h-8 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 text-[10px]">
+                                <Phone className="h-3 w-3 fill-current" /> Call
+                              </Button>
+                            </a>
+                          )}
+                          <a href={routeUrl} target="_blank" rel="noopener noreferrer">
+                            <Button size="sm" variant="outline" className="h-8 px-2.5 rounded-lg border-slate-700 hover:bg-slate-800 text-slate-200 font-bold gap-1 text-[10px]">
+                              <Navigation className="h-3 w-3" /> Navigate
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {resourceTab === 'Blood Banks' && nearest.nearestBloodBanks?.map(b => {
+                    const coords = b.location?.coordinates || [b.longitude, b.latitude];
+                    const routeUrl = `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${coords[1]},${coords[0]}`;
+                    return (
+                      <div key={b._id} className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 flex justify-between items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-slate-100 truncate">{b.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            🩸 {b.distanceText || (b.distance ? `${(b.distance / 1000).toFixed(1)} km away` : '—')} · timings: {b.timings || '24x7'}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {b.emergencyContact && (
+                            <a href={`tel:${b.emergencyContact}`}>
+                              <Button size="sm" className="h-8 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1 text-[10px]">
+                                <Phone className="h-3 w-3 fill-current" /> Call
+                              </Button>
+                            </a>
+                          )}
+                          <a href={routeUrl} target="_blank" rel="noopener noreferrer">
+                            <Button size="sm" variant="outline" className="h-8 px-2.5 rounded-lg border-slate-700 hover:bg-slate-800 text-slate-200 font-bold gap-1 text-[10px]">
+                              <Navigation className="h-3 w-3" /> Navigate
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {resourceTab === 'Ambulances' && nearest.nearestAmbulanceProviders?.map(a => {
+                    const coords = a.location?.coordinates || [a.longitude, a.latitude];
+                    const routeUrl = coords ? `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${coords[1]},${coords[0]}` : null;
+                    return (
+                      <div key={a._id} className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 flex justify-between items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-slate-100 truncate">{a.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            🚑 {a.distance ? `${(a.distance / 1000).toFixed(1)} km away` : '—'} · Source: {a.source || 'OSM'}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {a.phone && (
+                            <a href={`tel:${a.phone}`}>
+                              <Button size="sm" className="h-8 px-2.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white font-bold gap-1 text-[10px]">
+                                <Phone className="h-3 w-3 fill-current" /> Call {a.phone}
+                              </Button>
+                            </a>
+                          )}
+                          {routeUrl && (
+                            <a href={routeUrl} target="_blank" rel="noopener noreferrer">
+                              <Button size="sm" variant="outline" className="h-8 px-2.5 rounded-lg border-slate-700 hover:bg-slate-800 text-slate-200 font-bold gap-1 text-[10px]">
+                                <Navigation className="h-3 w-3" /> Navigate
+                              </Button>
+                            </a>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                  {resourceTab === 'Pharmacies' && nearest.nearestPharmacies?.map(p => {
+                    const coords = p.location?.coordinates || [p.longitude, p.latitude];
+                    const routeUrl = `https://www.google.com/maps/dir/?api=1&origin=${latitude},${longitude}&destination=${coords[1]},${coords[0]}`;
+                    return (
+                      <div key={p._id} className="p-3 rounded-xl border border-slate-800 bg-slate-900/40 flex justify-between items-center gap-3">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-black text-slate-100 truncate">{p.name}</p>
+                          <p className="text-[10px] text-slate-400 mt-0.5">
+                            💊 {p.distance ? `${(p.distance / 1000).toFixed(1)} km away` : '—'} · {p.openingHours || 'standard hours'}
+                          </p>
+                        </div>
+                        <div className="flex gap-1.5 shrink-0">
+                          {p.phone && (
+                            <a href={`tel:${p.phone}`}>
+                              <Button size="sm" className="h-8 px-2.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold gap-1 text-[10px]">
+                                <Phone className="h-3 w-3 fill-current" /> Call
+                              </Button>
+                            </a>
+                          )}
+                          <a href={routeUrl} target="_blank" rel="noopener noreferrer">
+                            <Button size="sm" variant="outline" className="h-8 px-2.5 rounded-lg border-slate-700 hover:bg-slate-800 text-slate-200 font-bold gap-1 text-[10px]">
+                              <Navigation className="h-3 w-3" /> Navigate
+                            </Button>
+                          </a>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         {/* Right: Emergency Contacts */}
@@ -519,12 +740,12 @@ export default function EmergencyHub() {
       <div className="grid gap-6 lg:grid-cols-3">
 
         {/* First Aid Guides */}
-        <Card className="lg:col-span-2 border border-slate-200/80 dark:border-slate-800 rounded-2xl shadow-sm">
-          <CardHeader className="pb-3 border-b dark:border-slate-800">
+        <Card className="lg:col-span-2 border border-slate-800 rounded-2xl shadow-sm bg-slate-900 text-white">
+          <CardHeader className="pb-3 border-b border-slate-800 bg-slate-950">
             <CardTitle className="text-base font-black flex items-center gap-2">
-              <HeartPulse className="h-5 w-5 text-red-600" /> First Aid Protocol Guides
+              <HeartPulse className="h-5 w-5 text-rose-500 animate-pulse" /> First Aid Protocol Guides
             </CardTitle>
-            <CardDescription>Certified step-by-step emergency procedures to follow while waiting for help.</CardDescription>
+            <CardDescription className="text-slate-400">Certified step-by-step emergency procedures to follow while waiting for help.</CardDescription>
           </CardHeader>
           <CardContent className="p-5 space-y-5">
             {/* Guide tabs */}
@@ -536,7 +757,7 @@ export default function EmergencyHub() {
                   className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all border ${
                     selectedGuide === guide.id
                       ? 'bg-rose-600 text-white border-rose-600 shadow-sm'
-                      : 'bg-slate-50 dark:bg-slate-900 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-800 hover:bg-slate-100 dark:hover:bg-slate-800'
+                      : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
                   }`}
                 >
                   {guide.title}
@@ -549,23 +770,66 @@ export default function EmergencyHub() {
               const guide = FIRST_AID_GUIDES.find(g => g.id === selectedGuide);
               return (
                 <div className="space-y-4">
-                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-100 dark:border-slate-800">
-                    <p className="text-sm font-black text-slate-800 dark:text-white">{guide.title}</p>
-                    <p className="text-xs text-slate-500 mt-1 font-semibold">{guide.desc}</p>
+                  <div className="p-4 rounded-xl bg-slate-950 border border-slate-850">
+                    <p className="text-sm font-black text-white">{guide.title}</p>
+                    <p className="text-xs text-slate-300 mt-1 font-semibold">{guide.desc}</p>
                   </div>
                   <div className="space-y-3">
-                    {guide.steps.map((step, index) => (
-                      <div key={index} className="flex gap-3 items-start text-xs font-medium">
-                        <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-50 text-rose-600 dark:bg-rose-950/30 text-[10px] font-black shrink-0 border border-rose-100 dark:border-rose-900">
-                          {index + 1}
+                    {guide.steps.map((step, index) => {
+                      const isWarning = step.toLowerCase().includes('warning') || step.toLowerCase().includes('do not') || step.toLowerCase().includes('never');
+                      const isSuccess = step.toLowerCase().includes('success') || step.toLowerCase().includes('cpr') || step.toLowerCase().includes('safe');
+                      const isNote = step.toLowerCase().includes('note') || step.toLowerCase().includes('important');
+
+                      let textColor = 'text-slate-100';
+                      if (isWarning) textColor = 'text-red-400 font-bold';
+                      else if (isSuccess) textColor = 'text-emerald-400';
+                      else if (isNote) textColor = 'text-amber-300';
+
+                      return (
+                        <div key={index} className="flex gap-3 items-start text-xs font-medium">
+                          <div className="flex h-5 w-5 items-center justify-center rounded-full bg-rose-600/20 text-rose-400 text-[10px] font-black shrink-0 border border-rose-500/30">
+                            {index + 1}
+                          </div>
+                          <p className={`${textColor} leading-relaxed mt-0.5`}>{step}</p>
                         </div>
-                        <p className="text-slate-700 dark:text-slate-350 leading-relaxed mt-0.5">{step}</p>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               );
             })()}
+
+            {/* AI first aid generator */}
+            <div className="border-t border-slate-800 pt-4 mt-4 space-y-3">
+              <p className="text-xs font-black text-white flex items-center gap-1.5">
+                <Brain className="h-4 w-4 text-rose-500 animate-pulse" /> Ask Gemini AI for First Aid Guidance
+              </p>
+              <div className="flex gap-2">
+                <Input
+                  placeholder="e.g. Snake bite, heat stroke, fracture..."
+                  value={aiCondition}
+                  onChange={e => setAiCondition(e.target.value)}
+                  className="bg-slate-950 border-slate-800 text-slate-100 text-xs rounded-xl h-9"
+                  onKeyDown={e => e.key === 'Enter' && aiCondition.trim() && getAIFirstAid(aiCondition)}
+                />
+                <Button
+                  onClick={() => getAIFirstAid(aiCondition)}
+                  disabled={aiLoading || !aiCondition.trim()}
+                  className="h-9 px-4 text-xs font-black rounded-xl bg-rose-600 hover:bg-rose-700 text-white shrink-0"
+                >
+                  {aiLoading ? 'Thinking...' : 'Get Guide'}
+                </Button>
+              </div>
+
+              {aiGuidance && (
+                <div className="p-4 rounded-xl border border-rose-500/20 bg-rose-500/5 max-h-[300px] overflow-y-auto space-y-2 text-slate-100 text-xs leading-relaxed scrollbar-thin">
+                  <div className="font-extrabold text-[10px] tracking-wider text-rose-400 uppercase flex items-center gap-1">
+                    🤖 Gemini Medical First-Aid Protocol
+                  </div>
+                  <div className="whitespace-pre-line font-medium text-slate-200">{aiGuidance}</div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
 

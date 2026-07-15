@@ -1,4 +1,5 @@
 import { GoogleGenAI } from '@google/genai';
+import { logAIRequest } from '../utils/aiLogger.js';
 
 let geminiClient;
 const getGeminiClient = () => {
@@ -16,12 +17,20 @@ const getGeminiClient = () => {
  * @returns {Promise<string>} The extracted raw text
  */
 export const performOCR = async (fileBuffer, mimeType) => {
+  const allowedMimeTypes = ['application/pdf', 'image/png', 'image/jpeg', 'image/jpg'];
+  if (!allowedMimeTypes.includes(mimeType)) {
+    const err = new Error(`Unsupported file type: ${mimeType}`);
+    err.code = 'INVALID_FILE';
+    throw err;
+  }
+
+  const startTime = Date.now();
   const base64Content = fileBuffer.toString('base64');
   const gemini = getGeminiClient();
 
   // Attempt Gemini Vision OCR with retry
   if (gemini) {
-    const maxRetries = 2;
+    const maxRetries = 3;
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       try {
         console.log(`[Gemini OCR] Transcribing text from mimeType: ${mimeType} (attempt ${attempt + 1})`);
@@ -49,14 +58,57 @@ export const performOCR = async (fileBuffer, mimeType) => {
         const text = response.text;
         if (text) {
           console.log('[Gemini OCR] Extracted text successfully');
+          const duration = Date.now() - startTime;
+          await logAIRequest({
+            endpoint: '/ocr',
+            uploadedFilename: 'vault-file',
+            fileSize: fileBuffer.length,
+            geminiRequest: { model: 'gemini-2.5-flash', mimeType },
+            geminiResponseTime: duration,
+            status: 'success'
+          });
           return text;
         }
       } catch (err) {
-        const status = err.status || err.httpStatusCode || err.code;
-        const isRetryable = status === 429 || status === 503 || err.message?.includes('fetch failed');
+        let status = err.status || err.httpStatusCode || err.code;
+        let rawMessage = err.message || '';
+
+        try {
+          if (rawMessage.trim().startsWith('{')) {
+            const parsed = JSON.parse(rawMessage);
+            if (parsed.error) {
+              rawMessage = parsed.error.message || rawMessage;
+              status = parsed.error.code || status;
+            }
+          }
+        } catch (e) {}
+
+        const lowerMsg = rawMessage.toLowerCase();
+        const isDailyQuota = lowerMsg.includes('daily') || lowerMsg.includes('limit: 20') || lowerMsg.includes('limit exceeded');
+        const isAuthError = status === 401 || status === 403 || lowerMsg.includes('api_key_invalid') || lowerMsg.includes('permission_denied') || lowerMsg.includes('key not valid');
+
+        const isRetryable = !isAuthError && !isDailyQuota && (
+          status === 429 ||
+          status === 503 ||
+          status === 504 ||
+          status === 'DEADLINE_EXCEEDED' ||
+          lowerMsg.includes('fetch failed') ||
+          lowerMsg.includes('network error') ||
+          lowerMsg.includes('timeout')
+        );
 
         if (!isRetryable || attempt === maxRetries) {
-          console.error(`[Gemini OCR Error] Vision extraction failed after ${attempt + 1} attempts:`, err.message || err);
+          console.error(`[Gemini OCR Error] Vision extraction failed after ${attempt + 1} attempts:`, rawMessage);
+          const duration = Date.now() - startTime;
+          await logAIRequest({
+            endpoint: '/ocr',
+            uploadedFilename: 'vault-file',
+            fileSize: fileBuffer.length,
+            geminiRequest: { model: 'gemini-2.5-flash', mimeType },
+            geminiResponseTime: duration,
+            status: 'failed',
+            error: err
+          });
           break;
         }
 
@@ -102,7 +154,9 @@ export const performOCR = async (fileBuffer, mimeType) => {
 
   // No fake fallback text — return a clear error message
   console.error('[OCR] All extraction methods failed for mimeType:', mimeType);
-  throw new Error(`Unable to extract text from uploaded ${mimeType === 'application/pdf' ? 'PDF' : 'document'}. Please ensure the GEMINI_API_KEY is configured and the file is readable.`);
+  const finalErr = new Error(`Unable to extract text from uploaded ${mimeType === 'application/pdf' ? 'PDF' : 'document'}. Please ensure the GEMINI_API_KEY is configured and the file is readable.`);
+  finalErr.code = 'OCR_FAILED';
+  throw finalErr;
 };
 
 /**
@@ -236,10 +290,11 @@ Return ONLY a JSON response in the following format:
   ]
 }`;
 
-  try {
-    const modelName = 'gemini-2.5-flash';
+  const startTime = Date.now();
+  const modelName = 'gemini-2.5-flash';
 
-    const response = await gemini.models.generateContent({
+  try {
+    const response = await getGeminiClient().models.generateContent({
       model: modelName,
       contents: prompt,
       config: {
@@ -257,27 +312,32 @@ Return ONLY a JSON response in the following format:
       const cleaned = text.replace(/```json/g, '').replace(/```/g, '').trim();
       parsed = JSON.parse(cleaned);
     }
+
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      endpoint: '/analyze-report',
+      geminiRequest: { model: modelName, recordType },
+      geminiResponseTime: duration,
+      status: 'success'
+    });
+
     console.log('[Gemini Report Analysis] Successfully analyzed text and generated structured data');
     return parsed;
   } catch (err) {
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      endpoint: '/analyze-report',
+      geminiRequest: { model: modelName, recordType },
+      geminiResponseTime: duration,
+      status: 'failed',
+      error: err
+    });
+
     console.error('[Gemini Report Analysis Error]:', err);
-    return {
-      summary: 'Failed to generate summary due to API error.',
-      clinicalSummary: 'An error occurred while communicating with Gemini.',
-      abnormalValues: [],
-      normalValues: [],
-      medicines: [],
-      diseases: [],
-      riskExplanation: 'Error processing report.',
-      lifestyleAdvice: [],
-      dietSuggestions: [],
-      exerciseSuggestions: [],
-      suggestedSpecialist: 'General Physician',
-      urgencyLevel: 'Low',
-      followUpTests: [],
-      questionsForDoctor: [],
-      healthScoreImpact: 0,
-      metrics: [],
-    };
+    // Propagate standard parsed/error code for analysis failures
+    const parseErr = new Error(`Clinical analysis failed: ${err.message}`);
+    parseErr.code = 'REPORT_PARSE_FAILED';
+    parseErr.status = err.status || 500;
+    throw parseErr;
   }
 };

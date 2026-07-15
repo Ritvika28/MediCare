@@ -9,7 +9,21 @@
     "dev:client": "cd client && npm run dev",
     "install:all": "npm install && cd server && npm install && cd ../client && npm install",
     "test": "cd server && npm test",
-    "build": "cd client && npm run build"
+    "build": "cd client && npm run build",
+    "clean:hospitals": "node HealthcareData/scripts/cleanHospitals.js",
+    "clean:labs": "node HealthcareData/scripts/cleanLabs.js",
+    "clean:bloodbanks": "node HealthcareData/scripts/cleanBloodBanks.js",
+    "merge:hospitals": "node HealthcareData/scripts/mergeHospitals.js",
+    "merge:labs": "node HealthcareData/scripts/mergeLabs.js",
+    "merge:bloodbanks": "node HealthcareData/scripts/mergeBloodBanks.js",
+    "import:hospitals": "node HealthcareData/scripts/importHospitals.js",
+    "import:labs": "node HealthcareData/scripts/importLabs.js",
+    "import:bloodbanks": "node HealthcareData/scripts/importBloodBanks.js",
+    "import:all": "npm run import:hospitals && npm run import:labs && npm run import:bloodbanks"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "mongoose": "^8.9.3"
   },
   "devDependencies": {
     "concurrently": "^8.2.2"

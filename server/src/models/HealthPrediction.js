@@ -22,6 +22,10 @@ const healthPredictionSchema = new mongoose.Schema({
   confidence: { type: Number, required: true }, // 0 to 100 confidence level
   contributingFactors: [{ type: String }],
   recommendations: [{ type: String }],
+  explanations: {
+    positive: [{ feature: String, value: Number }],
+    negative: [{ feature: String, value: Number }]
+  },
 }, { timestamps: true });
 
 healthPredictionSchema.index({ userId: 1, predictionType: 1, createdAt: -1 });

@@ -14,4 +14,12 @@ router.post('/recommendations', mlController.getRecommendations);
 router.get('/health-twin', mlController.getHealthTwin);
 router.post('/symptom-triage', mlController.symptomTriage);
 
+// New POST endpoints for direct model inference
+router.post('/predict-disease', mlController.predictDisease);
+router.post('/biological-age', mlController.predictBiologicalAge);
+router.post('/health-score', mlController.predictHealthScore);
+router.post('/recommend', mlController.recommend);
+router.post('/forecast', mlController.forecast);
+router.get('/health', mlController.getMLHealth);
+
 export default router;

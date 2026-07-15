@@ -123,8 +123,37 @@ export default function PatientDashboard() {
         </div>
       </div>
 
-      {/* — SECTION 1: Score Cards (4-up) — */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      {/* — SECTION 1: Score Cards (5-up) — */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+        {/* Health Stability Index (AI Model) */}
+        <Card className="flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-md transition-shadow rounded-2xl border border-teal-100 dark:border-slate-800 bg-gradient-to-br from-white to-teal-50/10 dark:from-slate-900 dark:to-slate-900">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-xs font-black text-teal-600 dark:text-teal-400 flex items-center gap-1 uppercase tracking-wider">
+              <Sparkles className="h-3.5 w-3.5" /> Stability Index
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col items-center justify-center py-4">
+            <div className="relative flex items-center justify-center">
+              <svg className="h-28 w-28 transform -rotate-90">
+                <circle cx="56" cy="56" r="45" className="stroke-slate-100 dark:stroke-slate-850" strokeWidth="8" fill="transparent" />
+                <circle cx="56" cy="56" r="45" className="stroke-teal-500" strokeWidth="8" fill="transparent"
+                  strokeDasharray={2 * Math.PI * 45}
+                  strokeDashoffset={2 * Math.PI * 45 * (1 - (stats?.healthStabilityScore || 85) / 100)}
+                  strokeLinecap="round"
+                  style={{ transition: 'stroke-dashoffset 0.8s ease' }}
+                />
+              </svg>
+              <div className="absolute flex flex-col items-center">
+                <span className="text-2xl font-black text-slate-805 dark:text-slate-100">{stats?.healthStabilityScore || 85}</span>
+                <span className="text-[10px] uppercase text-slate-400 font-bold tracking-wider">/ 100</span>
+              </div>
+            </div>
+          </CardContent>
+          <div className="bg-slate-50 p-2.5 text-center dark:bg-slate-900/85 border-t dark:border-slate-850">
+            <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 block">AI stability forecast index</span>
+          </div>
+        </Card>
+
         {/* Wellness Score */}
         <Card className="flex flex-col justify-between overflow-hidden shadow-sm hover:shadow-md transition-shadow rounded-2xl border border-slate-200/80 dark:border-slate-800">
           <CardHeader className="pb-2">

@@ -1,9 +1,13 @@
 import { AIChatHistory } from '../models/AIChatHistory.js';
 import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
-import { chatWithAI, suggestDoctorsBySymptoms } from '../services/aiService.js';
+import { chatWithAI, suggestDoctorsBySymptoms, getFirstAidGuidance as fetchFirstAid } from '../services/aiService.js';
 import { detectEmergencySymptoms, generateAINotification } from '../services/notificationEngineService.js';
 import { handleGeminiError } from '../utils/geminiErrorHandler.js';
+import { cloudinary } from '../config/cloudinary.js';
+import mongoose from 'mongoose';
+import { getAverageResponseTime } from '../utils/aiLogger.js';
+import { GoogleGenAI } from '@google/genai';
 
 export const sendAIMessage = asyncHandler(async (req, res) => {
   const { message, conversationId, latitude, longitude } = req.body;
@@ -76,5 +80,82 @@ export const deleteConversation = asyncHandler(async (req, res) => {
 
 export const symptomDoctorSuggest = asyncHandler(async (req, res) => {
   const result = await suggestDoctorsBySymptoms(req.body.symptoms || '');
+  res.json({ success: true, data: result });
+});
+
+export const healthCheck = asyncHandler(async (req, res) => {
+  // 1. Check Gemini Status
+  let geminiStatus = 'offline';
+  let geminiError = null;
+  try {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (apiKey) {
+      const ai = new GoogleGenAI({ apiKey });
+      const response = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: 'healthcheck',
+      });
+      if (response && response.text) {
+        geminiStatus = 'online';
+      }
+    }
+  } catch (err) {
+    geminiError = err.message || err;
+  }
+
+  // 2. Check Cloudinary Status
+  let cloudinaryStatus = 'offline';
+  let cloudinaryError = null;
+  try {
+    const pingResult = await cloudinary.api.ping();
+    if (pingResult && pingResult.status === 'ok') {
+      cloudinaryStatus = 'online';
+    }
+  } catch (err) {
+    cloudinaryError = err.message || err;
+  }
+
+  // 3. Check MongoDB Status
+  const mongoStatus = mongoose.connection.readyState === 1 ? 'online' : 'offline';
+
+  // 4. Gather Loaded Env Vars metadata (masked)
+  const envVars = {
+    GEMINI_API_KEY: process.env.GEMINI_API_KEY ? 'configured' : 'missing',
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY ? 'configured' : 'missing',
+    MONGODB_URI: process.env.MONGODB_URI ? 'configured' : 'missing',
+    JWT_SECRET: process.env.JWT_SECRET ? 'configured' : 'missing',
+    CLOUDINARY_CLOUD_NAME: process.env.CLOUDINARY_CLOUD_NAME ? 'configured' : 'missing',
+    SMTP_HOST: process.env.SMTP_HOST ? 'configured' : 'missing',
+    GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY ? 'configured' : 'missing',
+  };
+
+  res.json({
+    success: true,
+    data: {
+      uptimeSeconds: Math.round(process.uptime()),
+      averageResponseTimeMs: getAverageResponseTime(),
+      services: {
+        gemini: {
+          status: geminiStatus,
+          error: geminiError,
+        },
+        cloudinary: {
+          status: cloudinaryStatus,
+          error: cloudinaryError,
+        },
+        mongodb: {
+          status: mongoStatus,
+        },
+      },
+      loadedEnvironmentVariables: envVars,
+    },
+  });
+});
+
+export const getFirstAidGuidance = asyncHandler(async (req, res) => {
+  const { condition } = req.body;
+  if (!condition) throw new AppError('Condition name required', 400);
+
+  const result = await fetchFirstAid(condition);
   res.json({ success: true, data: result });
 });

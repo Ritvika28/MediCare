@@ -25,6 +25,7 @@ import { checkInteractions } from './MedicineInteractionService.js';
 import { startSymptomInterview, continueSymptomInterview } from './SymptomInterviewService.js';
 import { answerQnAOverReports } from './MedicalKnowledgeRetriever.js';
 import { generateHealthTimeline } from './TimelineService.js';
+import { logAIRequest } from '../utils/aiLogger.js';
 
 
 const SYSTEM_PROMPT = `You are HealthAssist, the core AI intelligence engine of MediCare — a professional healthcare discovery, analytics, and emergency support platform.
@@ -281,25 +282,46 @@ const getGemini = () => {
  * Retry wrapper for Gemini API calls with exponential backoff.
  * Handles transient errors (429 rate limit, 503 service unavailable, network timeouts).
  */
-const callGeminiWithRetry = async (fn, { maxRetries = 2, baseDelayMs = 1000 } = {}) => {
+export const callGeminiWithRetry = async (fn, { maxRetries = 3, baseDelayMs = 1000 } = {}) => {
   let lastError;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       return await fn();
     } catch (err) {
       lastError = err;
-      const status = err.status || err.httpStatusCode || err.code;
-      const lowerMsg = err.message?.toLowerCase() || '';
+      let status = err.status || err.httpStatusCode || err.code;
+      let rawMessage = err.message || '';
+
+      try {
+        if (rawMessage.trim().startsWith('{')) {
+          const parsed = JSON.parse(rawMessage);
+          if (parsed.error) {
+            rawMessage = parsed.error.message || rawMessage;
+            status = parsed.error.code || status;
+          }
+        }
+      } catch (e) {}
+
+      const lowerMsg = rawMessage.toLowerCase();
       const isDailyQuota = lowerMsg.includes('daily') || lowerMsg.includes('limit: 20') || lowerMsg.includes('limit exceeded');
-      
-      const isRetryable = (status === 429 && !isDailyQuota) || status === 503 || status === 'DEADLINE_EXCEEDED' || lowerMsg.includes('fetch failed') || lowerMsg.includes('network error');
+      const isAuthError = status === 401 || status === 403 || lowerMsg.includes('api_key_invalid') || lowerMsg.includes('permission_denied') || lowerMsg.includes('key not valid');
+
+      const isRetryable = !isAuthError && !isDailyQuota && (
+        status === 429 ||
+        status === 503 ||
+        status === 504 ||
+        status === 'DEADLINE_EXCEEDED' ||
+        lowerMsg.includes('fetch failed') ||
+        lowerMsg.includes('network error') ||
+        lowerMsg.includes('timeout')
+      );
 
       if (!isRetryable || attempt === maxRetries) {
         throw err;
       }
 
       const delay = baseDelayMs * Math.pow(2, attempt) + Math.random() * 500;
-      console.warn(`[Gemini Retry] Attempt ${attempt + 1} failed (${status}). Retrying in ${Math.round(delay)}ms...`);
+      console.warn(`[Gemini Retry] Attempt ${attempt + 1} failed (${status}: ${rawMessage}). Retrying in ${Math.round(delay)}ms...`);
       await new Promise(r => setTimeout(r, delay));
     }
   }
@@ -1187,6 +1209,7 @@ export const chatWithAI = async (messages, userId, options = {}) => {
   const patientContext = await getUserComprehensiveContext(userId);
   const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
 
+  const startTime = Date.now();
   try {
     // Convert history: keep last 15 messages, merge consecutive same-role messages
     const trimmedMessages = messages.slice(-15);
@@ -1240,7 +1263,7 @@ export const chatWithAI = async (messages, userId, options = {}) => {
       
       for (const call of response.functionCalls) {
         console.log(`[Tool Call] Executing: ${call.name}`, JSON.stringify(call.args || {}).slice(0, 200));
-        const result = await executeToolCall(call, userId, { conversationId, latitude, longitude });
+        const result = await executeToolCall(call, userId, { conversationId: options.conversationId, latitude, longitude });
         functionResponseParts.push({
           functionResponse: {
             name: call.name,
@@ -1252,11 +1275,30 @@ export const chatWithAI = async (messages, userId, options = {}) => {
       response = await callGeminiWithRetry(() => chat.sendMessage({ message: functionResponseParts }));
     }
 
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      userId,
+      endpoint: '/chat',
+      geminiRequest: { model: modelName, messageCount: messages.length, lastMessage: lastUserMessage },
+      geminiResponseTime: duration,
+      status: 'success'
+    });
+
     return {
       content: response.text || 'I could not generate a response. Please try rephrasing your question.',
       provider: 'gemini',
     };
   } catch (err) {
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      userId,
+      endpoint: '/chat',
+      geminiRequest: { model: modelName, messageCount: messages.length, lastMessage: lastUserMessage },
+      geminiResponseTime: duration,
+      status: 'failed',
+      error: err
+    });
+
     console.error('[Gemini Chat Error]:', err.message || err);
     throw err;
   }
@@ -1274,4 +1316,73 @@ export const suggestDoctorsBySymptoms = async (symptoms) => {
     .limit(5);
 
   return { specialization, doctors };
+};
+
+export const getFirstAidGuidance = async (emergencyCondition) => {
+  const client = getGemini();
+  const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+
+  const systemInstruction = `You are a certified first aid assistant. Provide clear, concise, step-by-step first aid instruction for the requested condition. 
+  
+  **CRITICAL RULES**:
+  1. DO NOT diagnose the patient.
+  2. DO NOT replace professional medical care. 
+  3. Include a warning at the beginning: "⚠️ Disclaimer: This is automated AI guidance only. Emergency services must be contacted immediately."
+  4. Present instructions in clean markdown numbered/bulleted format, optimized for high-pressure situations (short sentences, bold key actions).`;
+
+  const prompt = `Provide immediate first aid instructions for: ${emergencyCondition}.`;
+
+  if (!client) {
+    console.warn('[AI First Aid] Gemini client unavailable. Returning static guidelines.');
+    return {
+      content: `### First Aid Guidelines for ${emergencyCondition}
+⚠️ *AI service is offline. Emergency services (112 / 108) must be contacted immediately.*
+
+1. Secure the area and ensure the environment is safe.
+2. Check if the patient is conscious and breathing.
+3. Call 112 / 108 immediately.
+4. Keep the patient calm and stay with them until medical help arrives.`,
+      provider: 'local_fallback'
+    };
+  }
+
+  const startTime = Date.now();
+  try {
+    const response = await callGeminiWithRetry(() => client.models.generateContent({
+      model: modelName,
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      config: {
+        systemInstruction,
+        temperature: 0.3
+      }
+    }));
+
+    const text = response.text || response.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    const duration = Date.now() - startTime;
+
+    await logAIRequest({
+      userId: 'emergency_first_aid',
+      endpoint: '/first-aid',
+      geminiRequest: { model: modelName, condition: emergencyCondition },
+      geminiResponseTime: duration,
+      status: 'success'
+    });
+
+    return {
+      content: text,
+      provider: 'gemini'
+    };
+  } catch (err) {
+    console.error('[AI First Aid] Gemini call failed:', err.message);
+    return {
+      content: `### First Aid Guidelines for ${emergencyCondition}
+⚠️ *AI service call failed. Emergency services (112 / 108) must be contacted immediately.*
+
+1. Secure the area and ensure the environment is safe.
+2. Check if the patient is conscious and breathing.
+3. Call 112 / 108 immediately.
+4. Keep the patient calm and stay with them until medical help arrives.`,
+      provider: 'local_fallback'
+    };
+  }
 };

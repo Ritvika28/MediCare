@@ -5,6 +5,7 @@ import { AppError } from '../utils/AppError.js';
 import { asyncHandler } from '../utils/asyncHandler.js';
 import { performOCR, analyzeReportText } from '../services/ocrService.js';
 import { cloudinary, getPublicIdFromUrl } from '../config/cloudinary.js';
+import { logAIRequest } from '../utils/aiLogger.js';
 
 export const uploadRecord = asyncHandler(async (req, res) => {
   if (!req.file) throw new AppError('File required', 400);
@@ -13,6 +14,8 @@ export const uploadRecord = asyncHandler(async (req, res) => {
   if (!patient) throw new AppError('Patient profile not found', 404);
 
   let fileUrl = '';
+  let cloudinaryPublicId = '';
+  const startTime = Date.now();
 
   try {
     const uploadResult = await new Promise((resolve, reject) => {
@@ -29,6 +32,7 @@ export const uploadRecord = asyncHandler(async (req, res) => {
       stream.end(req.file.buffer);
     });
     fileUrl = uploadResult.secure_url;
+    cloudinaryPublicId = uploadResult.public_id;
     console.log('[Cloudinary] Successfully uploaded file, URL:', fileUrl);
   } catch (cloudinaryError) {
     console.warn('[Cloudinary] Upload failed/offline. Falling back to local storage:', cloudinaryError.message);
@@ -48,92 +52,139 @@ export const uploadRecord = asyncHandler(async (req, res) => {
       console.log('[Local Upload] Successfully saved file locally, URL:', fileUrl);
     } catch (localWriteError) {
       console.error('[Local Upload Error] Failed to write file locally:', localWriteError);
-      throw new AppError(`File storage failed: ${localWriteError.message}`, 500);
+      const storageErr = new AppError(`File storage failed: ${localWriteError.message}`, 500);
+      storageErr.code = 'UPLOAD_FAILED';
+      throw storageErr;
     }
   }
 
-  // Trigger OCR extraction & Gemini structured analysis
+  // Trigger OCR extraction & Gemini structured analysis (with cleanup on failure)
   const recordType = req.body.recordType || 'other';
-  let extractedText = '';
-  let insights = {};
+  let record;
+
   try {
-    extractedText = await performOCR(req.file.buffer, req.file.mimetype);
-    insights = await analyzeReportText(extractedText, recordType);
-  } catch (ocrErr) {
-    console.error('[Upload] OCR/Analysis failed, saving record without AI insights:', ocrErr.message);
-    extractedText = '';
-    insights = { summary: 'AI analysis could not be performed. The file has been securely stored.' };
-  }
+    const extractedText = await performOCR(req.file.buffer, req.file.mimetype);
+    const insights = await analyzeReportText(extractedText, recordType);
 
-  const tags = req.body.tags
-    ? (Array.isArray(req.body.tags) ? req.body.tags : req.body.tags.split(',').map(t => t.trim()).filter(Boolean))
-    : [];
+    const tags = req.body.tags
+      ? (Array.isArray(req.body.tags) ? req.body.tags : req.body.tags.split(',').map(t => t.trim()).filter(Boolean))
+      : [];
 
-  let detectedMedicines = req.body.detectedMedicines
-    ? (Array.isArray(req.body.detectedMedicines) ? req.body.detectedMedicines : req.body.detectedMedicines.split(',').map(m => m.trim()).filter(Boolean))
-    : [];
+    let detectedMedicines = req.body.detectedMedicines
+      ? (Array.isArray(req.body.detectedMedicines) ? req.body.detectedMedicines : req.body.detectedMedicines.split(',').map(m => m.trim()).filter(Boolean))
+      : [];
 
-  let doctor = req.body.doctor || '';
-  let hospital = req.body.hospital || '';
+    let doctor = req.body.doctor || '';
+    let hospital = req.body.hospital || '';
 
-  if (recordType === 'prescription' && insights) {
-    if (!doctor && insights.doctor) doctor = insights.doctor;
-    if (!hospital && insights.hospital) hospital = insights.hospital;
-    if (insights.medicines && detectedMedicines.length === 0) {
-      detectedMedicines = insights.medicines.map(m => m.name);
-    }
-  } else if (recordType === 'lab_report' && insights) {
-    if (!doctor && insights.suggestedSpecialist) {
-      doctor = `Consult: ${insights.suggestedSpecialist}`;
-    }
-  }
-
-  const record = await MedicalRecord.create({
-    patient: patient._id,
-    uploadedBy: req.user._id,
-    title: req.body.title || req.file.originalname,
-    description: req.body.description || insights.summary || '',
-    recordType,
-    fileUrl,
-    fileName: req.file.originalname,
-    fileSize: req.file.size,
-    mimeType: req.file.mimetype,
-    recordDate: req.body.recordDate ? new Date(req.body.recordDate) : new Date(),
-    doctor,
-    hospital,
-    tags,
-    detectedMedicines,
-    extractedText,
-    aiSummary: insights.summary || (recordType === 'prescription' ? 'Auto-extracted prescription medicines.' : ''),
-    medicalInsights: insights,
-  });
-
-  // Save health metrics automatically to update Health Analytics
-  if (insights && Array.isArray(insights.metrics) && insights.metrics.length > 0) {
-    try {
-      const { saveHealthMetric } = await import('../services/healthMetricService.js');
-      for (const m of insights.metrics) {
-        if (m.type && m.outputs) {
-          await saveHealthMetric({
-            userId: req.user._id,
-            patientId: patient._id,
-            metricType: m.type,
-            inputs: m.inputs || { source: 'medical_report', recordId: record._id },
-            outputs: m.outputs,
-            resultSummary: m.resultSummary || `${m.type} updated from medical report.`,
-            historyId: record._id
-          });
-        }
+    if (recordType === 'prescription' && insights) {
+      if (!doctor && insights.doctor) doctor = insights.doctor;
+      if (!hospital && insights.hospital) hospital = insights.hospital;
+      if (insights.medicines && detectedMedicines.length === 0) {
+        detectedMedicines = insights.medicines.map(m => m.name);
       }
-      
-      // Update background predictions/health twin models asynchronously
-      const { runMLSuiteForUser } = await import('../services/HealthTwinService.js');
-      runMLSuiteForUser(req.user._id).catch(err => {
-        console.error('Error running ML predictions suite after report upload:', err);
-      });
-    } catch (metricErr) {
-      console.error('Failed to import or save health metrics from uploaded report:', metricErr);
+    } else if (recordType === 'lab_report' && insights) {
+      if (!doctor && insights.suggestedSpecialist) {
+        doctor = `Consult: ${insights.suggestedSpecialist}`;
+      }
     }
+
+    record = await MedicalRecord.create({
+      patient: patient._id,
+      uploadedBy: req.user._id,
+      title: req.body.title || req.file.originalname,
+      description: req.body.description || insights.summary || '',
+      recordType,
+      fileUrl,
+      fileName: req.file.originalname,
+      fileSize: req.file.size,
+      mimeType: req.file.mimetype,
+      recordDate: req.body.recordDate ? new Date(req.body.recordDate) : new Date(),
+      doctor,
+      hospital,
+      tags,
+      detectedMedicines,
+      extractedText,
+      aiSummary: insights.summary || (recordType === 'prescription' ? 'Auto-extracted prescription medicines.' : ''),
+      medicalInsights: insights,
+    });
+
+    // Save health metrics automatically to update Health Analytics
+    if (insights && Array.isArray(insights.metrics) && insights.metrics.length > 0) {
+      try {
+        const { saveHealthMetric } = await import('../services/healthMetricService.js');
+        for (const m of insights.metrics) {
+          if (m.type && m.outputs) {
+            await saveHealthMetric({
+              userId: req.user._id,
+              patientId: patient._id,
+              metricType: m.type,
+              inputs: m.inputs || { source: 'medical_report', recordId: record._id },
+              outputs: m.outputs,
+              resultSummary: m.resultSummary || `${m.type} updated from medical report.`,
+              historyId: record._id
+            });
+          }
+        }
+        
+        // Update background predictions/health twin models asynchronously
+        const { runMLSuiteForUser } = await import('../services/HealthTwinService.js');
+        runMLSuiteForUser(req.user._id).catch(err => {
+          console.error('Error running ML predictions suite after report upload:', err);
+        });
+      } catch (metricErr) {
+        console.error('Failed to import or save health metrics from uploaded report:', metricErr);
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      userId: req.user._id,
+      endpoint: '/records/upload',
+      uploadedFilename: req.file.originalname,
+      fileSize: req.file.size,
+      cloudinaryResult: cloudinaryPublicId ? { public_id: cloudinaryPublicId, secure_url: fileUrl } : null,
+      geminiResponseTime: duration,
+      status: 'success'
+    });
+
+  } catch (flowError) {
+    console.error('[Upload Flow Error] Ingestion failed. Cleaning up files:', flowError.message);
+    
+    // Destroy Cloudinary asset
+    if (cloudinaryPublicId) {
+      await cloudinary.uploader.destroy(cloudinaryPublicId).catch(err => {
+        console.error('[Cloudinary Cleanup Error] Failed to delete orphaned file:', err.message);
+      });
+    }
+
+    // Destroy local file
+    if (fileUrl && fileUrl.includes('/uploads/medical-records/')) {
+      try {
+        const fs = await import('fs/promises');
+        const path = await import('path');
+        const filename = fileUrl.split('/uploads/medical-records/')[1];
+        if (filename) {
+          const filepath = path.join(process.cwd(), 'uploads/medical-records', filename);
+          await fs.unlink(filepath);
+        }
+      } catch (err) {
+        console.error('[Local Cleanup Error] Failed to unlink local file:', err.message);
+      }
+    }
+
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      userId: req.user._id,
+      endpoint: '/records/upload',
+      uploadedFilename: req.file.originalname,
+      fileSize: req.file.size,
+      geminiResponseTime: duration,
+      status: 'failed',
+      error: flowError
+    });
+
+    throw flowError; // Throw so errorHandler centralizes the classification
   }
 
   res.status(201).json({ success: true, data: record });

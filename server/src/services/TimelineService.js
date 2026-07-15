@@ -7,6 +7,8 @@ import { HealthMetric } from '../models/HealthMetric.js';
 import { HealthTwin } from '../models/HealthTwin.js';
 import { HealthPrediction } from '../models/HealthPrediction.js';
 import { HealthAssessment } from '../models/HealthAssessment.js';
+import { callGeminiWithRetry } from './aiService.js';
+import { logAIRequest } from '../utils/aiLogger.js';
 
 let geminiClient;
 const getGeminiClient = () => {
@@ -146,16 +148,26 @@ Return ONLY a JSON response in the following format:
   "recommendedActions": ["string"]
 }`;
 
-    const response = await client.models.generateContent({
+    const startTime = Date.now();
+    const response = await callGeminiWithRetry(() => client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: prompt,
       config: {
         responseMimeType: 'application/json',
         temperature: 0.2
       }
-    });
+    }));
 
     const summary = parseGeminiJSON(response.text);
+
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      userId,
+      endpoint: '/health-timeline',
+      geminiRequest: { model: 'gemini-2.5-flash' },
+      geminiResponseTime: duration,
+      status: 'success'
+    });
 
     return {
       success: true,
@@ -164,6 +176,14 @@ Return ONLY a JSON response in the following format:
     };
   } catch (err) {
     console.error('Error generating timeline summary:', err);
+    await logAIRequest({
+      userId,
+      endpoint: '/health-timeline',
+      geminiRequest: { model: 'gemini-2.5-flash' },
+      geminiResponseTime: 0,
+      status: 'failed',
+      error: err
+    });
     return {
       success: true,
       events: formattedEvents,

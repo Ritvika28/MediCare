@@ -1,6 +1,8 @@
 import { GoogleGenAI } from '@google/genai';
 import { MedicalRecord } from '../models/MedicalRecord.js';
 import { Patient } from '../models/Patient.js';
+import { callGeminiWithRetry } from './aiService.js';
+import { logAIRequest } from '../utils/aiLogger.js';
 
 let geminiClient;
 const getGeminiClient = () => {
@@ -35,15 +37,33 @@ export const detectReportSubtype = async (extractedText) => {
   const client = getGeminiClient();
   if (!client || !extractedText) return 'general';
 
+  const startTime = Date.now();
   try {
-    const response = await client.models.generateContent({
+    const response = await callGeminiWithRetry(() => client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: `Analyze the following medical report text and classify it into one of these specific subtypes: "CBC", "lipid", "thyroid", "kidney", "liver", "blood_sugar", "urine", or "general". Return only the single matching word in lowercase (e.g. "cbc" or "lipid").
 Text:
 "${extractedText.slice(0, 2000)}"`,
+    }));
+
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      endpoint: '/detect-report-subtype',
+      geminiRequest: { model: 'gemini-2.5-flash' },
+      geminiResponseTime: duration,
+      status: 'success'
     });
+
     return response.text?.trim().toLowerCase() || 'general';
   } catch (err) {
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      endpoint: '/detect-report-subtype',
+      geminiRequest: { model: 'gemini-2.5-flash' },
+      geminiResponseTime: duration,
+      status: 'failed',
+      error: err
+    });
     console.error('Error detecting report subtype:', err);
     return 'general';
   }
@@ -56,8 +76,9 @@ export const extractTestValues = async (extractedText, subtype) => {
   const client = getGeminiClient();
   if (!client || !extractedText) return {};
 
+  const startTime = Date.now();
   try {
-    const response = await client.models.generateContent({
+    const response = await callGeminiWithRetry(() => client.models.generateContent({
       model: 'gemini-2.5-flash',
       contents: `Extract all key medical/clinical test parameters, their numeric values, and standard reference units from this medical report.
 Report type/subtype: ${subtype}
@@ -73,10 +94,27 @@ Return ONLY a JSON object mapping the lowercase standard name of the test parame
         responseMimeType: 'application/json',
         temperature: 0.1,
       }
+    }));
+
+    const parsed = parseGeminiJSON(response.text);
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      endpoint: '/extract-test-values',
+      geminiRequest: { model: 'gemini-2.5-flash', subtype },
+      geminiResponseTime: duration,
+      status: 'success'
     });
 
-    return parseGeminiJSON(response.text);
+    return parsed;
   } catch (err) {
+    const duration = Date.now() - startTime;
+    await logAIRequest({
+      endpoint: '/extract-test-values',
+      geminiRequest: { model: 'gemini-2.5-flash', subtype },
+      geminiResponseTime: duration,
+      status: 'failed',
+      error: err
+    });
     console.error('Error extracting test values:', err);
     return {};
   }
@@ -162,8 +200,9 @@ export const compareMedicalReports = async (userId, reportIds = []) => {
       testValues: r.testValues
     }));
 
+    const startTime = Date.now();
     try {
-      const response = await client.models.generateContent({
+      const response = await callGeminiWithRetry(() => client.models.generateContent({
         model: 'gemini-2.5-flash',
         contents: `You are an AI Clinical Analyst. Analyze the following chronological timeline of medical reports for subtype "${subtype}" and compare values over time.
 Timeline Data:
@@ -193,9 +232,17 @@ Return ONLY a JSON response in the following format:
           responseMimeType: 'application/json',
           temperature: 0.2
         }
-      });
+      }));
 
       const parsedInsights = parseGeminiJSON(response.text);
+      const duration = Date.now() - startTime;
+      await logAIRequest({
+        userId,
+        endpoint: `/compare-reports/${subtype}`,
+        geminiRequest: { model: 'gemini-2.5-flash' },
+        geminiResponseTime: duration,
+        status: 'success'
+      });
 
       // Save comparison insights to the latest record in the group
       const latestRecord = groupRecords[groupRecords.length - 1];
@@ -219,6 +266,15 @@ Return ONLY a JSON response in the following format:
         comparisonHistory: parsedInsights.comparisonHistory
       });
     } catch (err) {
+      const duration = Date.now() - startTime;
+      await logAIRequest({
+        userId,
+        endpoint: `/compare-reports/${subtype}`,
+        geminiRequest: { model: 'gemini-2.5-flash' },
+        geminiResponseTime: duration,
+        status: 'failed',
+        error: err
+      });
       console.error(`Error comparing reports for subtype ${subtype}:`, err);
     }
   }

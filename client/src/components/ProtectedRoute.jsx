@@ -3,9 +3,11 @@ import { useAuth } from '@/context/AuthContext';
 import { Skeleton } from './ui/Skeleton';
 
 export function ProtectedRoute({ allowedRoles }) {
-  const { user, loading, isAuthenticated } = useAuth();
+  const { user, loading, authInitialized, isAuthenticated } = useAuth();
 
-  if (loading) {
+  console.log('[ProtectedRoute] Evaluation:', { loading, authInitialized, isAuthenticated, userEmail: user?.email });
+
+  if (loading || !authInitialized) {
     return (
       <div className="flex min-h-screen items-center justify-center p-8">
         <div className="w-full max-w-md space-y-4">

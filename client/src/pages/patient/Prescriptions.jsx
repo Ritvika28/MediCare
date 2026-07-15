@@ -12,7 +12,7 @@ import {
   FileText, Upload, Download, Search, Sparkles, Filter, 
   X, Calendar, Clipboard, HeartPulse, Activity, Pill, Beaker,
   Trash2, ShieldCheck, CreditCard, Award, Eye, Clock, Info, Check,
-  ChevronDown, ChevronUp
+  ChevronDown, ChevronUp, Plus
 } from 'lucide-react';
 import { formatDate } from '@/lib/utils';
 
@@ -69,6 +69,8 @@ export default function PatientPrescriptions() {
     mutationFn: (fd) => api.post('/records/upload', fd, { headers: { 'Content-Type': 'multipart/form-data' } }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
+      queryClient.invalidateQueries({ queryKey: ['records', profile?._id] });
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['profile-records'] });
       queryClient.invalidateQueries({ queryKey: ['health-analytics'] });
@@ -84,6 +86,8 @@ export default function PatientPrescriptions() {
     mutationFn: (id) => api.delete(`/records/${id}`),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['records'] });
+      queryClient.invalidateQueries({ queryKey: ['records', profile?._id] });
+      queryClient.invalidateQueries({ queryKey: ['prescriptions'] });
       queryClient.invalidateQueries({ queryKey: ['dashboard-stats'] });
       queryClient.invalidateQueries({ queryKey: ['profile-records'] });
       queryClient.invalidateQueries({ queryKey: ['health-analytics'] });

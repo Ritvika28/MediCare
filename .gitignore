@@ -1,4 +1,75 @@
+############################
+# Node
+############################
 node_modules/
+dist/
+build/
+
+############################
+# Environment
+############################
+.env
+.env.local
+server/.env
+
+############################
+# Python
+############################
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+############################
+# Healthcare datasets
+############################
+HealthcareData/raw/
+HealthcareData/cleaned/
+HealthcareData/merged/
+HealthcareData/processed/
+HealthcareData/feature_engineered/
+
+############################
+# NHANES
+############################
+*.xpt
+
+############################
+# CSV datasets
+############################
+*.csv
+
+############################
+# Trained ML Models
+############################
+*.pkl
+*.joblib
+*.onnx
+*.h5
+*.keras
+
+############################
+# CatBoost
+############################
+catboost_info/
+
+############################
+# Uploads
+############################
+server/uploads/
+
+############################
+# Logs
+############################
+logs/
+*.log
+
+############################
+# OS
+############################
+.DS_Storenode_modules/
 dist/
 build/
 .env
@@ -7,3 +78,37 @@ build/
 .DS_Store
 coverage/
 .vite/
+# ===============================
+# Healthcare Data
+# ===============================
+HealthcareData/raw/
+HealthcareData/import/
+
+# ===============================
+# Machine Learning
+# ===============================
+ml/models/
+ml/notebooks/
+catboost_info/
+
+# ===============================
+# Uploads
+# ===============================
+server/uploads/
+
+# ===============================
+# Python
+# ===============================
+**/__pycache__/
+*.pyc
+*.pyo
+
+# ===============================
+# NHANES
+# ===============================
+*.xpt
+
+# ===============================
+# Large datasets
+# ===============================
+*.csv
