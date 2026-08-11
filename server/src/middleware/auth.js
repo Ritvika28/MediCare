@@ -33,3 +33,27 @@ export const restrictTo = (...roles) =>
     }
     next();
   });
+
+export const optionalAuth = asyncHandler(async (req, res, next) => {
+  let token;
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith('Bearer ')) {
+    token = authHeader.split(' ')[1];
+  } else if (req.cookies?.accessToken) {
+    token = req.cookies.accessToken;
+  }
+
+  if (token) {
+    try {
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id);
+      if (user && user.isActive) {
+        req.user = user;
+      }
+    } catch {
+      // Ignore token verification errors for optional auth
+    }
+  }
+  next();
+});
+

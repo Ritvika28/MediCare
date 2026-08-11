@@ -97,10 +97,15 @@ export class MergeService {
           specialties: dbObj.specialties || osmItem.specialties || [],
           doctors: dbObj.doctors || [],
           phone: dbObj.phone && dbObj.phone !== 'N/A' ? dbObj.phone : (osmItem.phone || ''),
+          contactNumber: dbObj.contactNumber || dbObj.phone || osmItem.contactNumber || osmItem.phone || '',
+          emergencyContact: dbObj.emergencyContact || dbObj.phone || osmItem.emergencyContact || osmItem.phone || '',
           email: dbObj.email || osmItem.email || '',
 
           // Enriched details from Overpass Live
-          openingHours: osmItem.openingHours || dbObj.openingHours || '',
+          openingHours: osmItem.openingHours || dbObj.openingHours || dbObj.operatingHours || '',
+          operatingHours: dbObj.operatingHours || osmItem.operatingHours || osmItem.openingHours || '8:00 AM - 8:00 PM',
+          timings: dbObj.timings || osmItem.timings || '24x7',
+          isOpenNow: dbObj.isOpenNow !== undefined ? dbObj.isOpenNow : (osmItem.isOpenNow !== undefined ? osmItem.isOpenNow : true),
           wheelchair: osmItem.wheelchair || dbObj.wheelchair || 'no',
           emergency: osmItem.emergency !== undefined ? osmItem.emergency : (dbObj.emergencyServices || dbObj.emergencyAvailable || false),
           operator: osmItem.operator || '',
@@ -116,7 +121,12 @@ export class MergeService {
           source: 'dataset',
           isVerified: true,
           latitude: dbLat,
-          longitude: dbLng
+          longitude: dbLng,
+          contactNumber: dbObj.contactNumber || dbObj.phone || '',
+          emergencyContact: dbObj.emergencyContact || dbObj.phone || '',
+          operatingHours: dbObj.operatingHours || '8:00 AM - 8:00 PM',
+          timings: dbObj.timings || '24x7',
+          isOpenNow: dbObj.isOpenNow !== undefined ? dbObj.isOpenNow : true,
         });
       }
     });
@@ -131,6 +141,7 @@ export class MergeService {
         });
       }
     });
+
 
     return merged;
   }

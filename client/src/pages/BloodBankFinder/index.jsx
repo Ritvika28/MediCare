@@ -523,9 +523,12 @@ export default function BloodBankFinder() {
                       <div className="space-y-2 text-xs font-semibold text-slate-650 dark:text-slate-400">
                         <div className="flex items-start gap-2">
                           <MapPin className="h-4 w-4 text-slate-400 shrink-0 mt-0.5" />
-                          <span className="line-clamp-1">{bank.address.street}, {bank.address.city}, {bank.address.state}</span>
+                          <span className="line-clamp-1">
+                            {typeof bank.address === 'string' ? bank.address : [bank.address?.street, bank.address?.city, bank.address?.state].filter(Boolean).join(', ') || 'Address unavailable'}
+                          </span>
                         </div>
                         <div className="flex items-center gap-2">
+
                           <Clock className="h-4 w-4 text-slate-400 shrink-0" />
                           <span>Status: {bank.timings}</span>
                         </div>
@@ -649,9 +652,12 @@ export default function BloodBankFinder() {
             <div className="space-y-3 text-xs font-semibold text-slate-650 dark:text-slate-400 border-y border-slate-100 dark:border-slate-850 py-4">
               <div className="flex gap-2">
                 <MapPin className="h-4.5 w-4.5 text-slate-450 shrink-0" />
-                <span>{selectedBank.address.street}, {selectedBank.address.city}, {selectedBank.address.state} - {selectedBank.address.pincode}</span>
+                <span>
+                  {typeof selectedBank.address === 'string' ? selectedBank.address : [selectedBank.address?.street, selectedBank.address?.city, selectedBank.address?.state, selectedBank.address?.pincode].filter(Boolean).join(', ') || 'Address unavailable'}
+                </span>
               </div>
               <div className="flex gap-2">
+
                 <Clock className="h-4.5 w-4.5 text-slate-455 shrink-0" />
                 <span>Operating status: {selectedBank.timings}</span>
               </div>

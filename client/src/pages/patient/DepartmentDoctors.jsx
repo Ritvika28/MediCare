@@ -7,6 +7,7 @@ import { DoctorCard } from '@/components/DoctorCard';
 import { DoctorFilter } from '@/components/DoctorFilter';
 import { Button } from '@/components/ui/Button';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { Badge } from '@/components/ui/Badge';
 import * as Icons from 'lucide-react';
 import { Search, MapPin, Building2, User, Sparkles, Filter, Calendar, DollarSign, Clock, Users } from 'lucide-react';
 
